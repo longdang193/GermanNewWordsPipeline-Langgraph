@@ -1,0 +1,22 @@
+.env
+
+# runtime outputs
+Outputs/
+
+# local caches / venvs
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.uv-cache/
+Tools/.venv/
+Tools/.exe_venv/
+
+# build artifacts
+Tools/build/
+Tools/src/*.egg-info/
+AGENTS.md
+CLAUDE.md
+docs\superpowers
+.claude
+.gitnexus

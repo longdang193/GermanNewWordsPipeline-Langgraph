@@ -1,0 +1,6 @@
+[nw3]
+chunk_size = 20
+max_passes = 5
+min_see_also_entries = 3
+max_see_also_entries = 5
+
