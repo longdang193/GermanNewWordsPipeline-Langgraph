@@ -1,8 +1,123 @@
-
+- Mach mal halblang hier.
+- Jetzt haut endlich ab.
+- Chaos bricht aus
+- im Nu = in no time / in an instant / very quickly
+- ein Streit zwischen A und B → a dispute between A and B
+- sich ausbreiten auf + Akk. → to spread to …
+- eskalieren → to escalate
+- bewahren → to save / protect / spare
+- vor dem Schlimmsten bewahren = to save someone from the worst
+- sich verdrücken = to sneak off / slip away quietly
+- sich bei jemandem melden = to report someone / tell on someone
+- sich Mühe geben = to make an effort
+- (ziemlich) Pech haben = to be (pretty) unlucky
+- aus meiner Jahrgangsstufe = from my year group / grade
+- trudeln (ein) = to trickle in / arrive slowly and gradually
+- so tun als ob = to pretend that…
+- vertragen wir uns wieder = let’s make up again / reconcile
+- sich vertragen = to make up (after a conflict)
+- So, jetzt ist aber mal Ruhe. — Alright, quiet down now!
+- auf einmal → suddenly
+- jemanden schlichten → to mediate / calm a conflict
+- ein Streit bricht aus → a fight breaks out
+- gereizt werden = to become irritated / grumpy
+- 'jemandem zu schaffen machen' = 'to trouble/bother someone'.
+- vertragen sich — to make up / reconcile
+- schlichten — to mediate / settle a dispute
+- zu schaffen machen — to bother / get to someone
+- guter Dinge sein = to be in good spirits / optimistic
+- etwas aufbauen = to set up something (equipment, presentation, etc.)
+- Turnhalle
+- genauso viele … wie — Exactly as many … as
+- Fundkiste — Lost-and-found box
+- Naturalien
+- Währung
+- Fakten über
+- geheimnisvoll
+- auf wackligen Füßen stehen = to be on shaky ground (literally + figuratively)
+- an etwas arbeiten = to work on something
+- drin bleiben = to stay inside
+- während der Pause
+- drin = inside (colloquial for drinnen)
+- verzweifelt = desperate
+- ausmachen (here: “to account for / to make up”)
+- etwas macht … Prozent der Note aus — something makes up … percent of the grade
+- bat (formal past of bitten)
+- aus dem Nichts — from scratch, out of nothing
+- egoistisch
+- Asteroid
+- immer noch → still / still even now
+- Krass, oder? — Crazy, right?
+- ich bin sicher, dass … = I’m sure that …
+- als hätte + Konjunktiv II = as if someone had done something
+- eine Menge Zeit reinstecken = to put a lot of time into something
+- eine Menge Zeit = a lot of time
+- sich nicht weiter wundern = not to wonder any further / not to question it further
+- schräge Sachen machen
+- Pelzmütze — fur hat
+- mir klar sein sollen → I should have realized / it should have been clear to me
+- hätte … sein sollen → should have been (modal past, unreal/retrospective obligation)
+- komische Klamotten = weird / strange clothes
+- mir (wieder) einfallen = to come back to my mind / to remember again
+- keinen einzigen Gedanken an etwas verschwenden = not spend a single thought on something
+- Auf jeden Fall → anyway
+- Bis dahin
+- laktoseintolerant — lactose intolerant
+- das Referat halten = to give a presentation
+- auslosen → to draw lots / to randomly decide
+- wie sich herausstellte → as it turned out / as it became clear
+- sich herausstellen (reflexive verb meaning 'to turn out')
+- mein Hirn wird matschig
+- matschig = mushy / soft / foggy (literally like mud or mush)
+- Hirn = brain
+- sich im Unterricht zu konzentrieren = to concentrate in class
+- nicht gerade leicht macht = doesn’t make it easy (a softened way of saying “makes it difficult”)
+- läuft die Heizung = the heating is running
+- Thermostat
+- letzten paar Tage = last few days
+- nicht gerade toll = not exactly great / pretty bad (softened criticism)
+- durch etwas kommen = to get through something (often difficult)
+- Mittelschule
+- überlebt = survived
+- Kakerlaken
+- damals = back then
+- ausgelöscht — wiped out, exterminated
+- selbst wenn … käme — 'Selbst wenn' means 'even if' and introduces a hypothetical condition. 'Käme' is the subjunctive II (Konjunktiv II) form of 'kommen'. It is used here to express an unlikely or imagined scenario.
+- den Kopf zerbrechen = literally “to break one’s head” → to think very hard, worry excessively
+- es macht einen verrückt — 'Einen' is the accusative of the impersonal pronoun 'man' (one). The phrase 'jemanden verrückt machen' means 'to drive someone crazy'. In colloquial German, 'einen' is used instead of 'jemanden' in this fixed expression.
+- rumlaufen = to roam around / walk around casually
+- einer von ihnen = one of them
+- heutzutage = nowadays
+- aufgetaute = thawed (from freezing)
+- schmolz
+- Höhlenmenschen
+- eingefroren = frozen
+- Wesen = beings / creatures
+- vorkommen + dative — Verb 'vorkommen' means 'to seem, to appear'. Used with dative person + adjective. Example: 'mir kommt das einfach nicht richtig vor' (it doesn't seem right to me)
+- sich keine Sorgen machen
+- Es heißt” = “They say / it is said
+- Polkappen
+- Meeresspiegel
+- altmodisch
+- Aber mir kommt das einfach nicht richtig vor.
+- im Voraus
+- Abwägen
+- Sicherheitsabstand
+- derzeit
+- Handy-Empfang
+- Faktoren
+- sich erholen
+- Regierung
+- Vorlieben
+- echten
+- auswerte
+- Arbeitsphasen
+- grundsätzlich
 - Gleiche
-- Bedrohungen
+- Bedrohungen (threat)
 - Vorrang
 - Hitzewelle
 - Sonnenschein
 - altmodisch
 - scheinen
+- Gewohnheit

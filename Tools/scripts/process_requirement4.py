@@ -29,7 +29,7 @@ GERMAN_FIELDS = {
     "verb_praet",
     "verb_perf",
 }
-BACKFILL_FIELDS = ("de_1", "en_1", "Tags", "word_inf", "noun_gender", "noun_genetiv", "noun_plural")
+BACKFILL_FIELDS = ("de_1", "en_1", "word_inf", "noun_gender", "noun_genetiv", "noun_plural")
 NOUN_ONLY_FIELDS = {"noun_gender", "noun_genetiv", "noun_plural", "noun_forms"}
 SOURCE_OVERRIDE_FIELDS = {"meaning", "de_1", "en_1", "word_inf", "noun_gender", "noun_genetiv", "noun_plural", "Tags"}
 VOCAB_HEADER_LINES = {"%VOCAB (German) ver 3", "VOCAB (German) ver 3"}
@@ -92,7 +92,7 @@ def analyze_block_indicators(lines: list[str]) -> list[str]:
     return issues
 
 
-def normalize_see_also_entry(line):
+def normalize_see_also_entry(line: str) -> str:
     """
     Normalize a single see_also entry line.
 
@@ -276,13 +276,33 @@ def _derive_plural_form(lemma: str, noun_plural: str) -> str:
         return "-er"
     if pl == lemma + "s":
         return "-s"
-    if pl in (lemma.replace("a", "ä"), lemma.replace("o", "ö"), lemma.replace("u", "ü")):
-        return "⸚"
-    if pl in (lemma.replace("a", "ä") + "e", lemma.replace("o", "ö") + "e", lemma.replace("u", "ü") + "e"):
-        return "⸚e"
-    if pl in (lemma.replace("a", "ä") + "er", lemma.replace("o", "ö") + "er", lemma.replace("u", "ü") + "er"):
-        return "⸚er"
+    for base in _umlaut_variants(lemma):
+        if pl == base:
+            return "⸚"
+        if pl == base + "e":
+            return "⸚e"
+        if pl == base + "er":
+            return "⸚er"
     return "?"
+
+
+def _umlaut_variants(word: str) -> list[str]:
+    variants: set[str] = set()
+    chars = list(word)
+
+    for i in range(len(chars) - 1):
+        if chars[i] == "a" and chars[i + 1] == "u":
+            variant = chars.copy()
+            variant[i] = "ä"
+            variants.add("".join(variant))
+
+    for i in range(len(chars) - 1, -1, -1):
+        if chars[i] in ("a", "o", "u"):
+            variant = chars.copy()
+            variant[i] = {"a": "ä", "o": "ö", "u": "ü"}[chars[i]]
+            variants.add("".join(variant))
+
+    return sorted(variants)
 
 
 def _derive_noun_forms(word_inf: str, noun_genetiv: str, noun_plural: str) -> str:
@@ -332,6 +352,12 @@ def _normalize_requirement4_block(block_lines: list[str], source_fields: dict[st
     noun_genetiv = ""
     noun_plural = ""
     tags_line: str | None = None
+    source_tags = (source_fields or {}).get("Tags", "").strip()
+    pending_tags_line = (
+        f"Tags: {_normalize_german_field('Tags', source_tags)}\n"
+        if source_tags and not _is_blank_field("Tags", source_tags)
+        else None
+    )
 
     for line in block_lines[1:-1]:
         raw = line.rstrip("\n\r")
@@ -422,6 +448,8 @@ def _normalize_requirement4_block(block_lines: list[str], source_fields: dict[st
 
     if tags_line is not None:
         result.append(tags_line)
+    elif pending_tags_line is not None:
+        result.append(pending_tags_line)
 
     result.append(block_lines[-1])
     return result
@@ -455,7 +483,11 @@ def _cleanup_non_noun_noun_forms(lines: list[str]) -> list[str]:
     return cleaned
 
 
-def process_markdown_file(input_path, output_path, source_fields_by_word: dict[str, dict[str, str]] | None = None):
+def process_markdown_file(
+    input_path: str | Path,
+    output_path: str | Path,
+    source_fields_by_word: dict[str, dict[str, str]] | None = None,
+) -> None:
     """
     Process markdown and normalize see_also plus Requirement 4 field checks.
     """

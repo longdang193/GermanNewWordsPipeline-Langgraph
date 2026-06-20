@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from gnw_pipeline.llm_runtime import build_openai_compatible_model, resolve_structured_output
 from gnw_pipeline.prompts import load_prompt
 
 
@@ -68,11 +69,13 @@ async def llm_review_entry(
     repo_root = Path.cwd()
     system_prompt = load_prompt("nw1_qa_system", root=repo_root)
     instructions = load_prompt("nw1_qa_instructions", root=repo_root)
+    llm_model = build_openai_compatible_model(model, root=repo_root)
+    output_type = resolve_structured_output(model, ReviewResult, root=repo_root)
 
     agent = Agent(
-        model,
+        llm_model,
         system_prompt=system_prompt,
-        output_type=ReviewResult,
+        output_type=output_type,
     )
 
     prompt = (

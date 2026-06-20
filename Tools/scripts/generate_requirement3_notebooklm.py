@@ -19,6 +19,9 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
+
+from notebooklm_errors import classify_notebooklm_error, should_abort_notebooklm_bootstrap
 
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -106,6 +109,9 @@ def block_ok(block: str) -> bool:
     return True
 
 
+JsonObject = dict[str, Any]
+
+
 @dataclass
 class McpSession:
     proc: subprocess.Popen[str]
@@ -113,12 +119,12 @@ class McpSession:
     notebook_id: str
 
 
-def _send(proc: subprocess.Popen[str], msg: dict) -> None:
+def _send(proc: subprocess.Popen[str], msg: JsonObject) -> None:
     proc.stdin.write(json.dumps(msg, ensure_ascii=False) + "\n")  # type: ignore[union-attr]
     proc.stdin.flush()  # type: ignore[union-attr]
 
 
-def _recv(proc: subprocess.Popen[str], timeout_s: float) -> dict:
+def _recv(proc: subprocess.Popen[str], timeout_s: float) -> JsonObject:
     start = time.time()
     while time.time() - start < timeout_s:
         line = proc.stdout.readline()  # type: ignore[union-attr]
@@ -128,13 +134,20 @@ def _recv(proc: subprocess.Popen[str], timeout_s: float) -> dict:
         if not line:
             continue
         try:
-            return json.loads(line)
+            payload = json.loads(line)
         except Exception:
             continue
+        if isinstance(payload, dict):
+            return cast(JsonObject, payload)
     raise TimeoutError("MCP response timeout")
 
 
-def _tool_call(session: McpSession, name: str, arguments: dict, timeout_s: float) -> dict:
+def _tool_call(
+    session: McpSession,
+    name: str,
+    arguments: JsonObject,
+    timeout_s: float,
+) -> JsonObject:
     call_id = session.next_id
     session.next_id += 1
     _send(
@@ -149,7 +162,7 @@ def _tool_call(session: McpSession, name: str, arguments: dict, timeout_s: float
     return _recv(session.proc, timeout_s)
 
 
-def _tool_answer_text(resp: dict) -> str:
+def _tool_answer_text(resp: JsonObject) -> str:
     res = resp.get("result", {})
     sc = res.get("structuredContent")
     if isinstance(sc, dict) and "answer" in sc:
@@ -263,6 +276,8 @@ def main() -> int:
     cfg = load_runtime_config(root=ROOT).nw3
     chunk_size = cfg.chunk_size
     max_passes = cfg.max_passes  # retry passes for stubborn words
+    max_session_start_failures = 3
+    session_start_failures = 0
 
     for pass_num in range(1, max_passes + 1):
         missing = [w for w in words if w not in blocks_by_word]
@@ -279,6 +294,7 @@ def main() -> int:
             session: McpSession | None = None
             try:
                 session = start_session()
+                session_start_failures = 0
                 query = build_query(chunk)
                 resp = _tool_call(
                     session,
@@ -303,7 +319,32 @@ def main() -> int:
                     chunk_size = 1
                 print("[warn] timeout; reducing chunk_size and retrying later")
             except Exception as e:
-                print(f"[warn] query failed: {e}")
+                error_text = str(e)
+                if session is None:
+                    session_start_failures += 1
+                    error_kind = classify_notebooklm_error(error_text)
+                    print(
+                        f"[warn] session bootstrap failed ({error_kind}) "
+                        f"attempt={session_start_failures}: {e}"
+                    )
+                    if should_abort_notebooklm_bootstrap(
+                        error_text,
+                        consecutive_failures=session_start_failures,
+                        max_failures=max_session_start_failures,
+                    ):
+                        if error_kind == "auth":
+                            print(
+                                "[error] NotebookLM auth/session is invalid. "
+                                "Run notebooklm-mcp-auth and rerun NW3."
+                            )
+                        else:
+                            print(
+                                "[error] NotebookLM session bootstrap failed repeatedly. "
+                                "Check network/auth, then rerun NW3."
+                            )
+                        return 1
+                else:
+                    print(f"[warn] query failed: {e}")
             finally:
                 if session is not None:
                     stop_session(session)

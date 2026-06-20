@@ -8,6 +8,7 @@ from mdproc.validation_core import (
     iter_blocks,
     iter_see_also_entries,
     validate_no_blank_lines_between_fields,
+    validate_meaning_field_rules,
     validate_placeholder_values,
     validate_required_core_fields,
     validate_single_word_requires_see_also,
@@ -117,6 +118,30 @@ def test_validate_word_field_rules_rejects_parenthetical_gloss_and_noun_article(
     assert len(issues) == 2
     assert "must not include parenthetical meaning/gloss" in issues[0]
     assert "must not start with der/die/das" in issues[1]
+
+
+def test_validate_meaning_field_rules_rejects_noun_without_article_and_circular_gloss():
+    lines = dedent(
+        """
+        SSTART
+        word: Meeresspiegel
+        meaning: Meeresspiegel = Meeresspiegel / sea level
+        de_1: Der Meeresspiegel steigt langsam.
+        en_1: Sea level is rising slowly.
+        word_inf: der Meeresspiegel
+        noun_gender: der
+        noun_genetiv: des Meeresspiegels
+        noun_plural: -
+        noun_forms: -s, -
+        Tags: noun
+        EEND
+        """
+    ).splitlines()
+
+    issues = validate_meaning_field_rules(lines)
+
+    assert any("noun meaning must start with article-bearing lemma" in issue for issue in issues)
+    assert any("noun meaning gloss must not repeat the noun itself" in issue for issue in issues)
 
 
 def test_validate_single_word_requires_see_also_exempts_phrase_blocks():
@@ -275,6 +300,33 @@ def test_validate_requirement4_diacritics_allows_zue_prefix_words() -> None:
         Tags: adverb
         see_also:
         [zuerst|nid1] = first
+        EEND
+        """
+    ).splitlines()
+
+    assert validate_german_diacritics(lines) == []
+
+
+def test_validate_requirement4_diacritics_allows_tagesaktuell() -> None:
+    import sys
+    from pathlib import Path
+
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+
+    from validate_requirement4 import validate_german_diacritics
+
+    lines = dedent(
+        """
+        SSTART
+        word: derzeit
+        meaning: derzeit = zurzeit / currently
+        de_1: Derzeit arbeite ich im Homeoffice.
+        en_1: Currently I work from home.
+        Tags: adv
+        see_also:
+        [tagesaktuell|nid1] = current, up-to-date
         EEND
         """
     ).splitlines()

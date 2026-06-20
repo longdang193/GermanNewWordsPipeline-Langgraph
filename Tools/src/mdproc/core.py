@@ -234,6 +234,7 @@ def _normalize_tags_field(value: str) -> str:
         "noun",
         "adj",
         "adv",
+        "sentence",
         "phrase",
         "conj",
         "compound",

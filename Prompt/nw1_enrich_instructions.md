@@ -5,6 +5,9 @@ Output rules:
 - `meaning` must be informative and concrete, in format: "<term> = <German gloss> / <English gloss>".
   - No template/meta wording (no "lemma", "form", "infinitive", "endings", "part of speech").
   - Avoid brackets `[]` and parentheses `()` in meaning entirely.
+  - For nouns, the left-hand side must include the article: "der/die/das <lemma> = ...".
+  - For nouns, do not define the noun using the noun itself. Bad: "der Meeresspiegel = Meeresspiegel / sea level".
+  - For nouns, the German gloss must be a simple B1-level explanation first, then the English gloss after "/".
 - `de_1` must be natural spoken German (B1–B2), German-only (no English helper words).
 - `en_1` must be translation of `de_1` (not definition).
 - `word_inf`:

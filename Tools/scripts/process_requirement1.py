@@ -3,11 +3,13 @@
 Process Requirement 1: Generate enriched German vocabulary entries from word list.
 """
 
+import json
 import re
 import sys
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Mapping
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -16,8 +18,14 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 
+from gnw_pipeline.runtime_config import load_runtime_config
+from mdproc.validation_core import validate_meaning_field_rules
+
 class GermanVocabProcessor:
     """Process German vocabulary words and generate formatted entries."""
+
+    existing_words: set[str]
+    OverrideMap = Mapping[str, str | None]
 
     MEANING_OVERRIDES = {
         "Einarbeitung": "Einarbeitung = Zeit und Prozess, in dem jemand in neue Aufgaben eingefuehrt wird / onboarding, training period",
@@ -1577,7 +1585,7 @@ class GermanVocabProcessor:
                 meaning = None
         return word, meaning
 
-    def get_override(self, word: str) -> Optional[dict]:
+    def get_override(self, word: str) -> Optional[OverrideMap]:
         """Return lexical override data for known words."""
         # Try exact match first
         if word in self.ENTRY_OVERRIDES:
@@ -1598,13 +1606,17 @@ class GermanVocabProcessor:
                 return cleaned[len(article):].strip()
         return cleaned
 
-    def build_override_entry(self, word: str, override: dict) -> str:
+    def build_override_entry(self, word: str, override: OverrideMap) -> str:
         """Build a complete block from lexical override data."""
         tags = override["tags"]
-        meaning_text = override["meaning"]
+        word_inf = override["word_inf"]
+        meaning_text = self.normalize_override_meaning_text(
+            word=word,
+            word_inf=word_inf,
+            meaning_text=override["meaning"],
+        )
         de_1 = override["de_1"]
         en_1 = override["en_1"]
-        word_inf = override["word_inf"]
         display_word = self.strip_leading_article(
             word) if tags == "noun" else word
 
@@ -1646,6 +1658,28 @@ en_1: {en_1}
 word_inf: {word_inf}
 Tags: {tags}
 EEND"""
+
+    def normalize_override_meaning_text(
+        self,
+        *,
+        word: str,
+        word_inf: Optional[str],
+        meaning_text: Optional[str],
+    ) -> str:
+        """Normalize override meanings to NW1 contract form from canonical lemma."""
+        normalized_meaning = (meaning_text or "").strip()
+        if not normalized_meaning:
+            return ""
+
+        if "/" not in normalized_meaning:
+            return normalized_meaning
+
+        canonical_lhs = (word_inf or word).strip()
+        if "=" not in normalized_meaning:
+            return f"{canonical_lhs} = {normalized_meaning}"
+
+        _existing_lhs, rhs = normalized_meaning.split("=", 1)
+        return f"{canonical_lhs} = {rhs.strip()}"
 
     def enrich_phrase(self, word: str) -> str:
         """Enrich minimal phrases to be more idiomatic and clear."""
@@ -1704,6 +1738,11 @@ EEND"""
 
         # Reuse provided English gloss when available.
         if raw_meaning:
+            if "/" not in raw_meaning:
+                raise ValueError(
+                    f"Missing LLM-authored meaning for '{raw_word}'. "
+                    "Add override data instead of using code-generated fallback."
+                )
             return f"{raw_word} = {raw_meaning}"
 
         # If no gloss is provided, extract hints from parenthetical notes.
@@ -1729,10 +1768,13 @@ EEND"""
         if lower.startswith("nachdem"):
             return token if token.endswith(".") else f"{token}."
 
-        if lower.endswith(("en", "ern", "eln")) and " " not in token:
-            return f"Wir müssen {token} heute noch sorgfältig planen."
-
         if token[0].isupper() and " " not in token:
+            raise ValueError(
+                f"Missing LLM-authored German example for '{token}'. "
+                "Add override data instead of using code-generated fallback."
+            )
+
+        if lower.endswith(("en", "ern", "eln")) and " " not in token:
             raise ValueError(
                 f"Missing LLM-authored German example for '{token}'. "
                 "Add override data instead of using code-generated fallback."
@@ -1757,10 +1799,13 @@ EEND"""
         if lower.startswith("nachdem"):
             return "After I had completed the first action, I did the second action."
 
-        if lower.endswith(("en", "ern", "eln")) and " " not in token:
-            return f"We still need to plan {token} carefully today."
-
         if token[0].isupper() and " " not in token:
+            raise ValueError(
+                f"Missing LLM-authored English example for '{token}'. "
+                "Add override data instead of using code-generated fallback."
+            )
+
+        if lower.endswith(("en", "ern", "eln")) and " " not in token:
             raise ValueError(
                 f"Missing LLM-authored English example for '{token}'. "
                 "Add override data instead of using code-generated fallback."
@@ -1787,6 +1832,8 @@ EEND"""
                 if pattern.match(line):
                     issues.append(f"contains generic fallback line: '{line}'")
                     break
+
+        issues.extend(validate_meaning_field_rules(entry.splitlines()))
         return issues
 
     def print_quality_examples(self) -> None:
@@ -2014,6 +2061,41 @@ Tags: {pos}
 EEND"""
         return entry
 
+    def _get_nw1_parallelism(self) -> int:
+        """Return bounded worker count for independent NW1 term resolution."""
+        repo_root = SCRIPT_DIR.parent.parent
+        return max(1, load_runtime_config(root=repo_root).nw1.parallelism)
+
+    def _resolve_entry_candidate(
+        self,
+        enriched_word: str,
+        meaning: Optional[str],
+    ) -> tuple[str, str]:
+        """Resolve one term into entry text or explicit unresolved marker."""
+        try:
+            override = self.get_override(enriched_word)
+            if override is not None:
+                return ("entry", self.build_override_entry(enriched_word, override))
+
+            pos = self.detect_pos(enriched_word)
+            if pos == 'noun':
+                return ("entry", self.generate_noun_entry(enriched_word, meaning))
+            if pos == 'verb':
+                return ("entry", self.generate_verb_entry(enriched_word, meaning))
+            return ("entry", self.generate_other_entry(enriched_word, meaning))
+        except ValueError as exc:
+            msg = str(exc)
+            if "Missing LLM-authored" not in msg:
+                raise
+
+            llm_override = self.try_llm_enrich_override(
+                term=enriched_word,
+                meaning_hint=meaning,
+            )
+            if llm_override is None:
+                return ("unresolved", enriched_word)
+            return ("entry", self.build_override_entry(enriched_word, llm_override))
+
     def process(self) -> Tuple[int, int, int]:
         """Process the word list and generate vocabulary entries."""
         # Rebuild output from scratch; only deduplicate within this run.
@@ -2022,59 +2104,45 @@ EEND"""
         # Extract word list
         word_list = self.extract_word_list()
 
-        # Process each word
+        # Build independent work items in original order, with deterministic dedupe.
         entries: list[str] = []
         quality_issues: list[str] = []
         unresolved: list[str] = []
-        processed = 0
+        processed = len(word_list)
         added = 0
         skipped = 0
+        work_items: list[tuple[str, Optional[str]]] = []
 
         for line in word_list:
-            processed += 1
-
-            # Parse entry
             word, meaning = self.parse_entry(line)
-
-            # Enrich phrase if needed
             enriched_word = self.enrich_phrase(word)
-
-            # Check for duplicates
             if enriched_word.lower() in self.existing_words:
                 skipped += 1
                 continue
+            self.existing_words.add(enriched_word.lower())
+            work_items.append((enriched_word, meaning))
 
-            try:
-                override = self.get_override(enriched_word)
-                if override is not None:
-                    entry = self.build_override_entry(enriched_word, override)
-                else:
-                    # Detect POS
-                    pos = self.detect_pos(enriched_word)
-
-                    # Generate entry based on POS
-                    if pos == 'noun':
-                        entry = self.generate_noun_entry(enriched_word, meaning)
-                    elif pos == 'verb':
-                        entry = self.generate_verb_entry(enriched_word, meaning)
-                    else:
-                        entry = self.generate_other_entry(enriched_word, meaning)
-            except ValueError as exc:
-                msg = str(exc)
-                if "Missing LLM-authored" in msg:
-                    llm_override = self.try_llm_enrich_override(
-                        term=enriched_word,
-                        meaning_hint=meaning,
+        parallelism = min(self._get_nw1_parallelism(), max(1, len(work_items)))
+        if parallelism == 1:
+            resolved_items = [
+                self._resolve_entry_candidate(enriched_word, meaning)
+                for enriched_word, meaning in work_items
+            ]
+        else:
+            with ThreadPoolExecutor(max_workers=parallelism) as executor:
+                resolved_items = list(
+                    executor.map(
+                        lambda item: self._resolve_entry_candidate(item[0], item[1]),
+                        work_items,
                     )
-                    if llm_override is not None:
-                        entry = self.build_override_entry(enriched_word, llm_override)
-                    else:
-                        unresolved.append(enriched_word)
-                        self.existing_words.add(enriched_word.lower())
-                        continue
-                else:
-                    raise
+                )
 
+        for (enriched_word, _meaning), (status, payload) in zip(work_items, resolved_items):
+            if status == "unresolved":
+                unresolved.append(payload)
+                continue
+
+            entry = payload
             entry_issues = self.validate_entry_quality(entry)
             if entry_issues:
                 joined = "; ".join(entry_issues)
@@ -2082,7 +2150,6 @@ EEND"""
 
             entries.append(entry)
             added += 1
-            self.existing_words.add(enriched_word.lower())
 
         if quality_issues:
             self.print_quality_examples()
@@ -2121,22 +2188,37 @@ EEND"""
                         continue
                     seen.add(k)
                     uniq.append(w)
-                f.write(f"<!-- UNRESOLVED: {', '.join(uniq)} -->\n")
+                payload = json.dumps(uniq, ensure_ascii=False)
+                f.write(f"<!-- UNRESOLVED_JSON: {payload} -->\n")
 
-    def try_llm_enrich_override(self, *, term: str, meaning_hint: Optional[str]) -> Optional[dict]:
+    def try_llm_enrich_override(self, *, term: str, meaning_hint: Optional[str]) -> Optional[OverrideMap]:
         """LLM enrich term into override dict; returns None if disabled/unavailable."""
         if os.environ.get("GNW_ENABLE_NW1_LLM_ENRICH", "1") != "1":
             return None
         try:
+            from gnw_pipeline.llm_runtime import classify_openai_compatible_error
             from gnw_pipeline.nw1_llm_enrich import llm_enrich_term
         except Exception:
             return None
         try:
             enriched = llm_enrich_term(term=term, meaning_hint=meaning_hint or None)
-        except Exception:
+        except Exception as exc:
+            if classify_openai_compatible_error(exc) == "auth":
+                raise RuntimeError(
+                    "NW1 LLM authentication failed. "
+                    "Update OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL and rerun."
+                ) from exc
             return None
         data = enriched.model_dump()
         data["tags"] = data.pop("tags")
+
+        try:
+            preview_entry = self.build_override_entry(term, data)
+        except ValueError:
+            return None
+
+        if self.validate_entry_quality(preview_entry):
+            return None
         return data
 
 

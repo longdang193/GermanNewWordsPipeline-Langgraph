@@ -26,6 +26,7 @@ ENTRY_PARSE_RE = re.compile(
     r"^(?:(?P<article>der|die|das|\([^)]+\))\s+)?\[(?P<term>[^|\]]+)\|nid\d+\]\s*=\s*.+$"
 )
 REQUIRED_CORE_FIELDS = ("word", "meaning", "de_1", "en_1", "Tags")
+MEANING_SPLIT_RE = re.compile(r"^(?P<lhs>.+?)\s*=\s*(?P<gloss_de>.+?)\s*/\s*(?P<gloss_en>.+?)$")
 
 
 @dataclass(frozen=True)
@@ -251,6 +252,69 @@ def validate_word_field_rules(lines: list[str]) -> list[str]:
             issues.append(
                 f"Line {word_line}: noun word field must not start with der/die/das -> '{word}'"
             )
+
+    return issues
+
+
+def _normalize_meaning_fragment(text: str) -> str:
+    normalized = re.sub(r"\s+", " ", text.strip().casefold())
+    normalized = normalized.replace("…", "...")
+    return normalized
+
+
+def validate_meaning_field_rules(lines: list[str]) -> list[str]:
+    """Validate NW1 meaning contract, with stricter noun rules."""
+    issues: list[str] = []
+
+    for block in iter_blocks(lines):
+        values, line_numbers = extract_block_fields(block)
+        meaning = values.get("meaning", "")
+        if not meaning:
+            continue
+
+        meaning_line = line_numbers.get("meaning", block.start_line)
+        word = values.get("word", "").strip()
+        tags = split_tags(values.get("Tags", ""))
+        noun_gender = values.get("noun_gender", "").strip()
+        word_inf = values.get("word_inf", "").strip()
+
+        match = MEANING_SPLIT_RE.match(meaning)
+        if not match:
+            issues.append(
+                f"Line {meaning_line}: meaning field must match '<term> = <German gloss> / <English gloss>' -> '{meaning}'"
+            )
+            continue
+
+        lhs = match.group("lhs").strip()
+        gloss_de = match.group("gloss_de").strip()
+        gloss_en = match.group("gloss_en").strip()
+
+        if not gloss_de or not gloss_en:
+            issues.append(
+                f"Line {meaning_line}: meaning field must contain non-empty German and English glosses -> '{meaning}'"
+            )
+            continue
+
+        normalized_word = _normalize_meaning_fragment(word)
+        normalized_lhs = _normalize_meaning_fragment(lhs)
+        normalized_gloss_de = _normalize_meaning_fragment(gloss_de)
+
+        if "noun" in tags and noun_gender in {"der", "die", "das"}:
+            expected_lhs_text = word_inf or f"{noun_gender} {word}"
+            expected_lhs = _normalize_meaning_fragment(expected_lhs_text)
+            if normalized_lhs != expected_lhs:
+                issues.append(
+                    f"Line {meaning_line}: noun meaning must start with article-bearing lemma '{expected_lhs_text}' -> '{meaning}'"
+                )
+
+            circular_targets = {
+                normalized_word,
+                expected_lhs,
+            }
+            if normalized_gloss_de in circular_targets:
+                issues.append(
+                    f"Line {meaning_line}: noun meaning gloss must not repeat the noun itself -> '{meaning}'"
+                )
 
     return issues
 

@@ -46,6 +46,11 @@ NW3 uses NotebookLM MCP to generate `see_also`:
 - Tool: `Tools/scripts/generate_requirement3_notebooklm.py` (stdio MCP)
 - Prompt SSOT: `Prompt/nw3_notebooklm_query.md` (template with `{word_list}`)
 - Runtime knobs: `configs/runtime.toml`
+- If NW3 prints auth/session invalid or `Authentication expired`, rerun `dist/GermanNewWords/GermanNewWords.exe --root . auth --clear-proxy`, then rerun pipeline.
+
+LLM structured-output compatibility is also configured in `configs/runtime.toml`:
+- `[llm].prompted_structured_output_model_prefixes`
+- Use this when an OpenAI-compatible backend supports JSON prompting but not tool-forced structured output for some model families.
 
 If auth expired:
 - Run `notebooklm-mcp-auth`
@@ -80,4 +85,3 @@ Spec intent live in `Requirement/`:
 - Proxy break NotebookLM MCP: clear `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`.
 - Exe run from Explorer uses weird CWD; exe auto-detect repo root.
 - Want see fail detail: open `Outputs/logs/run_latest.log`.
-

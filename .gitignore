@@ -15,6 +15,7 @@ Tools/.exe_venv/
 # build artifacts
 Tools/build/
 Tools/src/*.egg-info/
+Tools/scripts/pipeline_out.log
 AGENTS.md
 CLAUDE.md
 docs\superpowers

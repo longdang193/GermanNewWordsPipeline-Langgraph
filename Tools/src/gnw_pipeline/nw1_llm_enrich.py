@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from pathlib import Path
 
 from gnw_pipeline.env import load_dotenv_if_present
+from gnw_pipeline.llm_runtime import build_openai_compatible_model, resolve_structured_output
 from gnw_pipeline.prompts import load_prompt
 
 
@@ -43,15 +44,11 @@ def _enrich_instructions(root: Path) -> str:
 
 def _get_model_and_agent(model_name: str):
     from pydantic_ai import Agent
-    from pydantic_ai.models.openai import OpenAIModel
-    from pydantic_ai.providers.openai import OpenAIProvider
 
-    base_url = os.environ.get("OPENAI_BASE_URL") or None
-    api_key = os.environ.get("OPENAI_API_KEY") or None
-    provider = OpenAIProvider(base_url=base_url, api_key=api_key)
-    model = OpenAIModel(model_name, provider=provider)
     root = Path(os.getcwd()).resolve()
-    agent = Agent(model, system_prompt=_enrich_system(root), output_type=EnrichedOverride)
+    model = build_openai_compatible_model(model_name, root=root)
+    output_type = resolve_structured_output(model_name, EnrichedOverride, root=root)
+    agent = Agent(model, system_prompt=_enrich_system(root), output_type=output_type)
     return agent
 
 

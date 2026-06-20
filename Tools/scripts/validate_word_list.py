@@ -11,6 +11,7 @@ This script:
 6. Rejects unreplaced template placeholders in vocabulary fields
 """
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -24,6 +25,7 @@ from mdproc.validation_core import (
     analyze_block_structure,
     iter_blocks,
     iter_block_field_lines,
+    validate_meaning_field_rules,
     validate_no_blank_lines_between_fields,
     resolve_with_legacy,
     validate_placeholder_values,
@@ -75,12 +77,34 @@ GENERIC_LINE_PATTERNS = (
         r"^en_1:\s*We regularly need .+ in everyday work\.?\s*$", re.IGNORECASE),
 )
 
+UNRESOLVED_JSON_RE = re.compile(r"<!--\s*UNRESOLVED_JSON\s*:\s*(.*?)\s*-->")
 UNRESOLVED_RE = re.compile(r"<!--\s*UNRESOLVED\s*:\s*(.*?)\s*-->")
 
 
 def extract_unresolved_words(lines: list[str]) -> list[str]:
-    """Extract unresolved words from `<!-- UNRESOLVED: ... -->` comment."""
+    """Extract unresolved words from structured or legacy unresolved comments."""
     content = "\n".join(lines)
+
+    m_json = UNRESOLVED_JSON_RE.search(content)
+    if m_json:
+        raw_json = m_json.group(1).strip()
+        if raw_json:
+            try:
+                payload = json.loads(raw_json)
+            except json.JSONDecodeError:
+                payload = None
+            if isinstance(payload, list):
+                json_words = [item.strip() for item in payload if isinstance(item, str) and item.strip()]
+                json_seen: set[str] = set()
+                json_uniq: list[str] = []
+                for w in json_words:
+                    k = w.casefold()
+                    if k in json_seen:
+                        continue
+                    json_seen.add(k)
+                    json_uniq.append(w)
+                return json_uniq
+
     m = UNRESOLVED_RE.search(content)
     if not m:
         return []
@@ -101,7 +125,6 @@ def extract_unresolved_words(lines: list[str]) -> list[str]:
         seen.add(k)
         uniq.append(w)
     return uniq
-
 
 def extract_word_list_source(requirement_path: Path, fallback_word_list_path: Path) -> tuple[str, str]:
     """Return raw word-list text and a human-readable source description."""
@@ -315,6 +338,7 @@ def main() -> int:
     block_count, block_issues = analyze_block_structure(lines, label="vocabulary file")
     placeholder_issues = validate_no_template_placeholders(lines)
     word_hygiene_issues = validate_word_field_rules(lines)
+    meaning_field_issues = validate_meaning_field_rules(lines)
     generic_content_issues = validate_no_generic_content(lines)
     required_field_issues = validate_required_core_fields(lines)
     tag_order_issues = validate_tags_last(lines)
@@ -337,6 +361,11 @@ def main() -> int:
     if word_hygiene_issues:
         print("   [ERROR] Word field hygiene validation failed:")
         for issue in word_hygiene_issues:
+            print(f"      - {issue}")
+
+    if meaning_field_issues:
+        print("   [ERROR] Meaning field validation failed:")
+        for issue in meaning_field_issues:
             print(f"      - {issue}")
 
     if generic_content_issues:
@@ -386,6 +415,7 @@ def main() -> int:
         and all("No SSTART...EEND blocks found" in issue for issue in block_issues)
         and not placeholder_issues
         and not word_hygiene_issues
+        and not meaning_field_issues
         and not generic_content_issues
         and not required_field_issues
         and not tag_order_issues
@@ -395,7 +425,7 @@ def main() -> int:
         and not drift_detected
     )
 
-    if block_count == expected_covered and not block_issues and not placeholder_issues and not word_hygiene_issues and not generic_content_issues and not required_field_issues and not tag_order_issues and not blank_line_issues and not duplicate_field_issues and not noun_shape_issues and not drift_detected:
+    if block_count == expected_covered and not block_issues and not placeholder_issues and not word_hygiene_issues and not meaning_field_issues and not generic_content_issues and not required_field_issues and not tag_order_issues and not blank_line_issues and not duplicate_field_issues and not noun_shape_issues and not drift_detected:
         print(
             f"\n[OK] VALIDATION PASSED: {block_count} entries generated; {len(unresolved_words)} unresolved explicitly recorded."
         )
@@ -435,6 +465,9 @@ def main() -> int:
 
     if word_hygiene_issues:
         print("\n[ERROR] WORD FIELD ERROR: remove parenthetical glosses from word: and avoid noun leading articles in word:.")
+
+    if meaning_field_issues:
+        print("\n[ERROR] MEANING FIELD ERROR: noun meanings must use article-bearing lemmas and must not define the noun with itself.")
 
     if generic_content_issues:
         print("\n[ERROR] GENERIC CONTENT ERROR: replace placeholder meanings and meta-sentences with real definitions and example sentences.")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 import textwrap
-from mdproc.core import preprocess_file1, merge_see_also
+from mdproc.core import merge_see_also, preprocess_file1, process_markdown
 
 
 def dd(s: str) -> str:
@@ -139,3 +139,18 @@ def test_merge_ignores_file1_blocks_without_see_also():
     merged = merge_see_also(file1, file2)
     # no new see_also added
     assert "see_also:" not in merged
+
+
+def test_process_markdown_preserves_sentence_tag():
+    src = dd(
+        """
+    SSTART
+    word: Aber mir kommt das einfach nicht richtig vor.
+    Tags: sentence
+    EEND
+    """
+    )
+
+    out = process_markdown(src)
+
+    assert "Tags: sentence" in out

@@ -23,6 +23,9 @@ from pathlib import Path
 from urllib import request
 from urllib.error import URLError
 from datetime import datetime, timezone
+from typing import Any, TextIO
+
+from notebooklm_errors import classify_notebooklm_error
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -91,7 +94,7 @@ def run_cmd(
     cmd: list[str],
     desc: str,
     *,
-    log_fp,
+    log_fp: TextIO,
     cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     print(f"\n[STEP] {desc}")
@@ -120,8 +123,8 @@ def is_mcp_healthy() -> bool:
     try:
         with request.urlopen(MCP_HEALTH_URL, timeout=3) as resp:
             payload = resp.read().decode("utf-8", errors="replace")
-        parsed = json.loads(payload)
-        return parsed.get("status") == "healthy"
+        parsed: Any = json.loads(payload)
+        return isinstance(parsed, dict) and parsed.get("status") == "healthy"
     except (URLError, TimeoutError, json.JSONDecodeError, OSError):
         return False
 
@@ -295,8 +298,9 @@ def run_pipeline() -> int:
 
         if q.returncode != 0:
             combined = (q.stdout or "") + "\n" + (q.stderr or "")
-            if "Authentication expired" in combined or "RPC Error 16" in combined:
-                print("[INFO] NotebookLM auth expired. Attempting re-auth once...")
+            error_kind = classify_notebooklm_error(combined)
+            if error_kind == "auth":
+                print("[INFO] NotebookLM auth/session invalid. Attempting re-auth once...")
                 if run_notebooklm_auth(cwd=ROOT) != 0:
                     return 1
                 q_retry = run_cmd(
@@ -305,6 +309,13 @@ def run_pipeline() -> int:
                     log_fp=log_fp,
                 )
                 if q_retry.returncode != 0:
+                    retry_kind = classify_notebooklm_error(
+                        (q_retry.stdout or "") + "\n" + (q_retry.stderr or "")
+                    )
+                    if retry_kind == "auth":
+                        print("[STOP] NotebookLM auth/session still invalid after re-auth.")
+                    elif retry_kind == "network":
+                        print("[STOP] NotebookLM retry failed due network/session bootstrap issues.")
                     return 1
             else:
                 # stdio helper prints actionable errors itself; keep runner simple.

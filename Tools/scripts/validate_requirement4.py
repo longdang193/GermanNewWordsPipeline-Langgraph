@@ -8,13 +8,13 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 SRC_DIR = SCRIPT_DIR.parent / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from mdproc.validation_core import (
+    Block,
     extract_block_fields,
     find_noncanonical_reference_entries,
     iter_blocks,
@@ -83,7 +83,7 @@ def validate_see_also_syntax_from_lines(lines: list[str]) -> tuple[int, list[str
     return valid_entries, issues
 
 
-def find_entry_line(block, entry: str) -> int:
+def find_entry_line(block: Block, entry: str) -> int:
     """Return source line number for a see_also entry within a block."""
     for offset, raw in enumerate(block.body_lines, 1):
         if raw.strip() == entry:
@@ -235,6 +235,8 @@ def _translit_issue_text(value: str) -> str:
         match = ASCII_TRANSLIT_RE.search(word)
         if match:
             if match.group(0).lower() == "ue" and match.start() == 1 and lower_word.startswith("zue"):
+                continue
+            if match.group(0).lower() == "ue" and lower_word.endswith("aktuell"):
                 continue
             return f"contains ASCII transliteration '{match.group(0)}'"
     return ""
