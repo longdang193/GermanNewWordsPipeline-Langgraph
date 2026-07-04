@@ -79,7 +79,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     try:
         from gnw_pipeline.langgraph_app import run as run_graph  # type: ignore[import-not-found]
 
-        print("[STEP] Run full pipeline NW1->NW4 (LangGraph)")
+        print("[STEP] Run full pipeline NW1->NW4 (LangGraph)", flush=True)
         run_graph(root=root, clear_proxy=args.clear_proxy)
         return 0
     except ModuleNotFoundError:
@@ -87,7 +87,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         if not script.exists():
             print(f"[FAIL] Missing pipeline runner: {script}")
             return 2
-        print("[STEP] Run full pipeline NW1->NW4 (script runner)")
+        print("[STEP] Run full pipeline NW1->NW4 (script runner)", flush=True)
         # In a frozen exe, sys.executable points back to the exe (would recurse).
         if getattr(sys, "frozen", False):
             py_launcher = shutil.which("py") or shutil.which("python") or shutil.which("python3")
@@ -203,3 +203,4 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
+

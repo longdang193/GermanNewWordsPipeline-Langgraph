@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+import builtins
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SRC_DIR = ROOT / "Tools" / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+import gnw.__main__ as gnw_main
+
+
+def test_cmd_run_flushes_step_banner_in_script_runner(monkeypatch, tmp_path: Path) -> None:
+    root = tmp_path
+    script = root / "Tools" / "scripts" / "run_full_pipeline.py"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text("print('ok')\n", encoding="utf-8")
+
+    printed: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def fake_print(*args: object, **kwargs: object) -> None:
+        printed.append((args, dict(kwargs)))
+
+    real_import = builtins.__import__
+
+    def fake_import(name: str, globals=None, locals=None, fromlist=(), level: int = 0):
+        if name == "gnw_pipeline.langgraph_app":
+            raise ModuleNotFoundError(name)
+        return real_import(name, globals, locals, fromlist, level)
+
+    class Result:
+        returncode = 0
+
+    monkeypatch.setattr(builtins, "print", fake_print)
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    monkeypatch.setattr(gnw_main, "sys", type("SysStub", (), {"executable": sys.executable, "frozen": False})())
+    monkeypatch.setattr(gnw_main.subprocess, "run", lambda *args, **kwargs: Result())
+
+    args = type("Args", (), {"root": root, "clear_proxy": False})()
+
+    assert gnw_main.cmd_run(args) == 0
+    assert printed == [(("[STEP] Run full pipeline NW1->NW4 (script runner)",), {"flush": True})]

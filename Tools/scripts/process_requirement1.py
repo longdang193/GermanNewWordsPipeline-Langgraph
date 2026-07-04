@@ -3,7 +3,6 @@
 Process Requirement 1: Generate enriched German vocabulary entries from word list.
 """
 
-import json
 import re
 import sys
 import os
@@ -19,7 +18,14 @@ if str(SRC_DIR) not in sys.path:
 
 
 from gnw_pipeline.runtime_config import load_runtime_config
-from gnw_pipeline.nw1_qa import qa_entry_from_block_text, qa_entry_issues
+from gnw_pipeline.nw1_qa import (
+    Nw1ResultRow,
+    QaIssue,
+    qa_entry_from_block_text,
+    qa_entry_issues,
+    write_report_payload,
+)
+from gnw_pipeline.nw1_quality_rules import find_generic_content_issues
 from mdproc.validation_core import validate_meaning_field_rules
 
 class GermanVocabProcessor:
@@ -1270,77 +1276,6 @@ class GermanVocabProcessor:
         "zugreifen": {"tags": "verb", "meaning": "zugreifen = auf Daten, Unterlagen oder ein Angebot Zugriff nehmen / to access", "de_1": "Auf diese Datei koennen nur Mitarbeitende der Abteilung zugreifen.", "en_1": "Only employees of the department can access this file.", "word_inf": "zugreifen", "verb_present": "greift zu", "verb_past": "griff zu", "verb_perfect": "hat zugegriffen"},
     })
 
-    BAD_OUTPUT_MARKERS = (
-        "Ausdruck im Themenkontext",
-        "context-specific expression",
-        "In diesem Kontext ist",
-        "is particularly important",
-        "nuetzlicher Ausdruck fuer Kommunikation",
-        "useful expression for communication",
-        "zentrales Nomen im Lernkontext",
-        "key noun in this learning context",
-        "Handlung oder Vorgang im Alltag",
-        "action or process in everyday life",
-        "Ausdruck mit erklaerendem Zusatz",
-        "konkrete Bedeutung im aktuellen Themenfeld",
-        "konkrete Formulierung im Themenfeld",
-        "Nomen im Themenkontext",
-        "Verb fuer Handlung im Kontext",
-        "Bedeutung als Verb im aktuellen Themenfeld",
-        "contextual noun meaning",
-        "contextual meaning",
-        "verb meaning in this topic",
-        "This full phrase is used directly in the example.",
-    )
-
-    BAD_LINE_PATTERNS = (
-        re.compile(
-            r"^meaning:\s*.+?=\s*nuetzlicher Ausdruck fuer Kommunikation\s*/\s*useful expression for communication\s*$", re.IGNORECASE),
-        re.compile(
-            r"^meaning:\s*.+?=\s*zentrales Nomen im Lernkontext\s*/\s*key noun in this learning context\s*$", re.IGNORECASE),
-        re.compile(
-            r"^meaning:\s*.+?=\s*Handlung oder Vorgang im Alltag\s*/\s*action or process in everyday life\s*$", re.IGNORECASE),
-        re.compile(
-            r"^de_1:\s*Wir verwenden .+ oft in alltaeglichen Situationen\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^en_1:\s*We often use .+ in everyday situations\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^de_1:\s*Der Begriff .+ ist in diesem Thema besonders wichtig\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^en_1:\s*The term .+ is especially important in this topic\.?\s*$", re.IGNORECASE),
-        # Generic fallback sentences produced by build_example_de / build_example_en
-        re.compile(
-            r"^de_1:\s*Im Text kommt .+ mehrmals vor\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^en_1:\s*The word .+ appears several times in the text\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^de_1:\s*Im Unterricht besprechen wir .+\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^en_1:\s*In class, we discuss .+\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^de_1:\s*Wir setzen das Wort .+ in einem klaren Satz ein\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^en_1:\s*We use the word .+ in a clear sentence\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^de_1:\s*.+ taucht in diesem Abschnitt mehrfach auf\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^en_1:\s*This term appears several times in this section\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^en_1:\s*This sentence pattern is used to describe sequence and timing\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^de_1:\s*Bei diesem Thema spielt .+ eine wichtige Rolle\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^de_1:\s*.+ spielt bei dieser Aufgabe eine wichtige Rolle\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^de_1:\s*Im Arbeitsalltag brauchen wir .+ regelm[aä]ssig\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^en_1:\s*.+ plays an important role in this (?:topic|task)\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^en_1:\s*We regularly need .+ in everyday work\.?\s*$", re.IGNORECASE),
-        re.compile(
-            r"^en_1:\s*This full phrase is used directly in the example\.?\s*$", re.IGNORECASE),
-    )
-
     CONTEXT_OVERRIDES = {
         "Abläufe": ("Wir müssen die Abläufe im Team noch besser abstimmen.", "We still need to coordinate the processes in the team better."),
         "Abzug": ("Bei diesem Schaden gibt es keinen Abzug vom Preis.", "In this case there is no deduction from the price."),
@@ -1503,7 +1438,7 @@ class GermanVocabProcessor:
         self.requirement_file = requirement_file
         self.output_file = output_file
         self.existing_words = set()
-        self._last_llm_repair_issues: dict[str, str] = {}
+        self._last_llm_repair_issues: dict[str, list[QaIssue]] = {}
         self._last_llm_repair_entries: dict[str, str] = {}
 
     def load_existing_words(self) -> None:
@@ -1842,15 +1777,12 @@ EEND"""
             "Add override data instead of using code-generated fallback."
         )
 
-    def validate_entry_quality(self, entry: str) -> list[str]:
+    def validate_entry_quality(self, entry: str) -> list[QaIssue]:
         """Return quality issues for one generated block."""
-        issues: list[str] = []
+        issues: list[QaIssue] = []
         word_value: str | None = None
         word_inf_value: str | None = None
         tags_value: str | None = None
-        for marker in self.BAD_OUTPUT_MARKERS:
-            if marker in entry:
-                issues.append(f"contains generic marker: '{marker}'")
 
         for raw_line in entry.splitlines():
             line = raw_line.strip()
@@ -1860,34 +1792,81 @@ EEND"""
                 word_inf_value = line.split(": ", 1)[1].strip()
             elif line.startswith("Tags: "):
                 tags_value = line.split(": ", 1)[1].strip().lower()
-            for pattern in self.BAD_LINE_PATTERNS:
-                if pattern.match(line):
-                    issues.append(f"contains generic fallback line: '{line}'")
-                    break
+
+        for generic_issue in find_generic_content_issues(entry.splitlines()):
+            issues.append(
+                QaIssue(
+                    code=generic_issue.code,
+                    field=generic_issue.field,
+                    severity="hard_fail",
+                    message=generic_issue.message,
+                    evidence=generic_issue.evidence,
+                )
+            )
 
         if tags_value == "noun" and word_value:
             noun_shape_issue = self._noun_word_shape_issue(word_value, word_inf_value or "")
             if noun_shape_issue is not None:
-                issues.append(noun_shape_issue)
+                issues.append(
+                    QaIssue(
+                        code="noun_shape_issue",
+                        field="word",
+                        severity="hard_fail",
+                        message=noun_shape_issue,
+                        evidence=word_value,
+                    )
+                )
 
-        issues.extend(validate_meaning_field_rules(entry.splitlines()))
+        for meaning_issue in validate_meaning_field_rules(entry.splitlines()):
+            issues.append(
+                QaIssue(
+                    code="meaning_field_issue",
+                    field="meaning",
+                    severity="hard_fail",
+                    message=meaning_issue,
+                    evidence=meaning_issue,
+                )
+            )
         qa_entry = qa_entry_from_block_text(entry)
         if qa_entry is not None:
             issues.extend(
-                f"{qa_issue.code}: {qa_issue.message}"
+                qa_issue
                 for qa_issue in qa_entry_issues(qa_entry)
                 if qa_issue.severity == "hard_fail"
             )
         return issues
 
-    def _issue_codes(self, issues: list[str]) -> list[str]:
+    def _issue_codes(self, issues: list[QaIssue | str]) -> list[str]:
         codes: list[str] = []
         for issue in issues:
-            code, _sep, _rest = issue.partition(":")
-            normalized = code.strip()
-            if normalized and normalized not in codes:
-                codes.append(normalized)
+            code = issue.code if isinstance(issue, QaIssue) else issue.partition(":")[0].strip()
+            if code and code not in codes:
+                codes.append(code)
         return codes
+
+    def _format_issue_text(self, issues: list[QaIssue | str]) -> str:
+        parts: list[str] = []
+        for issue in issues:
+            if isinstance(issue, QaIssue):
+                parts.append(f"{issue.code}: {issue.message}")
+            else:
+                parts.append(issue)
+        return "; ".join(parts)
+
+    def _report_path(self) -> Path:
+        return self.output_file.parent / "reports" / "nw1_qa_latest.json"
+
+    def _write_nw1_report(self, results: list[Nw1ResultRow]) -> None:
+        ordered_results = sorted(results, key=lambda row: row.input_index)
+        write_report_payload(
+            self._report_path(),
+            results=ordered_results,
+            issue_rows=(),
+            env={
+                "report_stage": "nw1_generate",
+                "openai_api_key_present": bool(os.environ.get("OPENAI_API_KEY")),
+            },
+        )
 
     def print_quality_examples(self) -> None:
         """Print concrete quality guidance with bad vs good examples."""
@@ -2159,9 +2138,9 @@ EEND"""
                     reason_code = self.UNRESOLVED_REASON_MISSING_DE_EXAMPLE
                 elif "English example" in msg:
                     reason_code = self.UNRESOLVED_REASON_MISSING_EN_EXAMPLE
-                blocker_text = self._last_llm_repair_issues.pop(enriched_word, "")
+                blocker_issues = self._last_llm_repair_issues.pop(enriched_word, [])
                 remembered_entry = self._last_llm_repair_entries.pop(enriched_word, None)
-                blocker_codes = self._issue_codes([blocker_text]) if blocker_text else []
+                blocker_codes = self._issue_codes(blocker_issues)
                 if remembered_entry and qa_entry_from_block_text(remembered_entry) is not None:
                     return ("unresolved_entry", {
                         "term": enriched_word,
@@ -2207,51 +2186,111 @@ EEND"""
         entries_clean: list[str] = []
         entries_unresolved_part: list[str] = []
         unresolved: list[dict[str, object]] = []
+        results: list[Nw1ResultRow] = []
         processed = len(word_list)
         added = 0
         skipped = 0
-        work_items: list[tuple[str, Optional[str]]] = []
+        work_items: list[tuple[int, str, Optional[str]]] = []
+        first_seen_indexes: dict[str, int] = {}
 
-        for line in word_list:
+        for input_index, line in enumerate(word_list):
             word, meaning = self.parse_entry(line)
             enriched_word = self.enrich_phrase(word)
-            if enriched_word.lower() in self.existing_words:
+            normalized_word = enriched_word.lower()
+            if normalized_word in first_seen_indexes:
                 skipped += 1
+                results.append(
+                    Nw1ResultRow(
+                        input_index=input_index,
+                        term=enriched_word,
+                        resolution_status="clean",
+                        origin_reason_code="duplicate_input",
+                        write_disposition="duplicate_skipped",
+                        duplicate_of_input_index=first_seen_indexes[normalized_word],
+                    )
+                )
                 continue
-            self.existing_words.add(enriched_word.lower())
-            work_items.append((enriched_word, meaning))
+            first_seen_indexes[normalized_word] = input_index
+            self.existing_words.add(normalized_word)
+            work_items.append((input_index, enriched_word, meaning))
 
         parallelism = min(self._get_nw1_parallelism(), max(1, len(work_items)))
         if parallelism == 1:
             resolved_items = [
                 self._resolve_entry_candidate(enriched_word, meaning)
-                for enriched_word, meaning in work_items
+                for _input_index, enriched_word, meaning in work_items
             ]
         else:
             with ThreadPoolExecutor(max_workers=parallelism) as executor:
                 resolved_items = list(
                     executor.map(
                         lambda item: self._resolve_entry_candidate(item[0], item[1]),
-                        work_items,
+                        [(enriched_word, meaning) for _input_index, enriched_word, meaning in work_items],
                     )
                 )
 
-        for (enriched_word, _meaning), (status, payload) in zip(work_items, resolved_items):
+        for (input_index, enriched_word, _meaning), (status, payload) in zip(work_items, resolved_items):
             if status == "unresolved":
                 unresolved.append(payload)
+                origin_reason_code = str(payload.get("origin_reason_code") or payload.get("reason_code") or "omitted")
+                final_blocker_codes = tuple(str(code) for code in payload.get("final_blocker_codes") or ())
+                final_blocker_code = payload.get("final_blocker_code")
+                results.append(
+                    Nw1ResultRow(
+                        input_index=input_index,
+                        term=enriched_word,
+                        resolution_status="omitted",
+                        origin_reason_code=origin_reason_code,
+                        final_blocker_code=str(final_blocker_code) if final_blocker_code else None,
+                        final_blocker_codes=final_blocker_codes,
+                        write_disposition="omitted",
+                    )
+                )
                 continue
             if status == "unresolved_entry":
                 entries_unresolved_part.append(str(payload["entry"]))
+                final_blocker_codes = tuple(str(code) for code in payload.get("final_blocker_codes") or ())
+                final_blocker_code = payload.get("final_blocker_code")
+                results.append(
+                    Nw1ResultRow(
+                        input_index=input_index,
+                        term=enriched_word,
+                        resolution_status="unresolved_part",
+                        origin_reason_code=str(payload.get("origin_reason_code") or payload.get("reason_code") or "unresolved_part"),
+                        final_blocker_code=str(final_blocker_code) if final_blocker_code else None,
+                        final_blocker_codes=final_blocker_codes,
+                        output_section="unresolved_part",
+                    )
+                )
                 added += 1
                 continue
 
             entry = payload
             entry_issues = self.validate_entry_quality(entry)
             if entry_issues:
-                blocker_codes = self._issue_codes(entry_issues)
                 entries_unresolved_part.append(entry)
+                blocker_codes = self._issue_codes(entry_issues)
+                results.append(
+                    Nw1ResultRow(
+                        input_index=input_index,
+                        term=enriched_word,
+                        resolution_status="unresolved_part",
+                        origin_reason_code="generation_quality_gate",
+                        final_blocker_code=blocker_codes[0] if blocker_codes else None,
+                        final_blocker_codes=tuple(blocker_codes),
+                        output_section="unresolved_part",
+                    )
+                )
             else:
                 entries_clean.append(entry)
+                results.append(
+                    Nw1ResultRow(
+                        input_index=input_index,
+                        term=enriched_word,
+                        resolution_status="clean",
+                        output_section="main",
+                    )
+                )
             added += 1
 
         # Write to file
@@ -2264,6 +2303,8 @@ EEND"""
                 skipped,
                 unresolved,
             )
+
+        self._write_nw1_report(results)
 
         if unresolved:
             raise RuntimeError(self._format_unresolved_summary(unresolved))
@@ -2345,8 +2386,8 @@ EEND"""
             entry_issues = self.validate_entry_quality(preview_entry)
             self._last_llm_repair_entries[term] = preview_entry
             if entry_issues:
-                issue_text = "; ".join(entry_issues)
-                self._last_llm_repair_issues[term] = issue_text
+                issue_text = self._format_issue_text(entry_issues)
+                self._last_llm_repair_issues[term] = entry_issues
                 if should_print_trace:
                     print(f"NW1 repair retry {attempt}/{max_attempts} for '{term}': {issue_text}")
                 if repeated_quality_issue == issue_text:

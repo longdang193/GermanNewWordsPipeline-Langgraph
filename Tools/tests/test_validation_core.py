@@ -400,9 +400,10 @@ def test_nw1_qa_accepts_stored_split_verb_form() -> None:
     assert issues == []
 
 
-def test_nw1_qa_report_uses_unified_rows_schema(tmp_path: Path) -> None:
+def test_nw1_qa_report_uses_results_and_issue_rows_schema(tmp_path: Path) -> None:
     input_path = tmp_path / "Outputs" / "01_words.md"
     output_path = tmp_path / "Outputs" / "reports" / "nw1_qa_latest.json"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     input_path.parent.mkdir(parents=True, exist_ok=True)
     input_path.write_text(
         dedent(
@@ -418,6 +419,25 @@ def test_nw1_qa_report_uses_unified_rows_schema(tmp_path: Path) -> None:
             """
         )
         + "\n",
+        encoding="utf-8",
+    )
+    output_path.write_text(
+        json.dumps(
+            {
+                "results": [
+                    {
+                        "input_index": 0,
+                        "term": "eine warme Umgebung",
+                        "resolution_status": "unresolved_part",
+                        "origin_reason_code": "generation_quality_gate",
+                        "final_blocker_code": "target_not_realized",
+                    }
+                ],
+                "issue_rows": [],
+                "env": {},
+                "summary": {},
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -437,9 +457,11 @@ def test_nw1_qa_report_uses_unified_rows_schema(tmp_path: Path) -> None:
 
     assert proc.returncode == 0
     payload = json.loads(output_path.read_text(encoding="utf-8"))
-    assert sorted(payload.keys()) == ["env", "input", "issue_count", "row_count", "rows"]
-    assert payload["row_count"] == 1
-    assert any(issue["code"] == "target_not_realized" for issue in payload["rows"][0]["issues"])
+    assert sorted(payload.keys()) == ["env", "issue_rows", "results", "summary"]
+    assert payload["summary"]["result_count"] == 1
+    assert payload["summary"]["issue_row_count"] == 1
+    assert payload["results"][0]["resolution_status"] == "unresolved_part"
+    assert any(issue["code"] == "target_not_realized" for issue in payload["issue_rows"][0]["issues"])
 
 
 def test_looks_like_noun_candidate_rejects_sentence_like_phrase() -> None:

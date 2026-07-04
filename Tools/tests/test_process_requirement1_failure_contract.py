@@ -216,7 +216,7 @@ EEND"""
 
     issues = processor.validate_entry_quality(entry)
 
-    assert any(expected_fragment in issue for issue in issues)
+    assert any(issue.code == expected_fragment for issue in issues)
 
 
 def test_validate_entry_quality_accepts_valid_realized_sentence(tmp_path: Path) -> None:
@@ -290,7 +290,15 @@ EEND"""
     monkeypatch.setattr(
         processor,
         "validate_entry_quality",
-        lambda entry: [] if "word: Alpha" in entry else ["target_not_realized: de_1 does not realize target lexeme."],
+        lambda entry: [] if "word: Alpha" in entry else [
+            process_requirement1.QaIssue(
+                code="target_not_realized",
+                field="de_1",
+                severity="hard_fail",
+                message="de_1 does not realize target lexeme.",
+                evidence="Beta heute.",
+            )
+        ],
     )
 
     with pytest.raises(RuntimeError) as exc:
@@ -310,6 +318,14 @@ EEND"""
 
     assert "REVIEW_TAIL_JSON" not in text
     assert "UNRESOLVED_JSON" not in text
+
+    report_path = tmp_path / "reports" / "nw1_qa_latest.json"
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert sorted(payload.keys()) == ["env", "issue_rows", "results", "summary"]
+    assert [row["resolution_status"] for row in payload["results"]] == ["clean", "unresolved_part", "omitted"]
+    assert payload["results"][1]["final_blocker_code"] == "target_not_realized"
+    assert payload["results"][2]["origin_reason_code"] == "missing_meaning"
+    assert payload["summary"]["omitted_count"] == 1
 
 
 def test_process_succeeds_when_only_review_tail_exists(monkeypatch, tmp_path: Path) -> None:
@@ -333,7 +349,19 @@ EEND"""
     monkeypatch.setattr(processor, "parse_entry", lambda line: (line, None))
     monkeypatch.setattr(processor, "enrich_phrase", lambda word: word)
     monkeypatch.setattr(processor, "_resolve_entry_candidate", lambda *_args: ("entry", tail_entry))
-    monkeypatch.setattr(processor, "validate_entry_quality", lambda _entry: ["target_not_realized: de_1 does not realize target lexeme."])
+    monkeypatch.setattr(
+        processor,
+        "validate_entry_quality",
+        lambda _entry: [
+            process_requirement1.QaIssue(
+                code="target_not_realized",
+                field="de_1",
+                severity="hard_fail",
+                message="de_1 does not realize target lexeme.",
+                evidence="Beta heute.",
+            )
+        ],
+    )
 
     processed, added, skipped = processor.process()
 
@@ -341,6 +369,10 @@ EEND"""
     text = output_file.read_text(encoding="utf-8")
     assert "## UNRESOLVED PART" in text
     assert len(list(iter_blocks(text.splitlines()))) == 1
+
+    payload = json.loads((tmp_path / "reports" / "nw1_qa_latest.json").read_text(encoding="utf-8"))
+    assert payload["results"][0]["resolution_status"] == "unresolved_part"
+    assert payload["summary"]["written_block_count"] == 1
 
 
 def test_failed_repair_last_valid_block_routes_to_unresolved_part(monkeypatch, tmp_path: Path) -> None:
@@ -361,7 +393,15 @@ Tags: noun
 EEND"""
 
     def fake_try_llm_enrich_override(*, term: str, meaning_hint: str | None):
-        processor._last_llm_repair_issues[term] = "target_not_realized: de_1 does not realize target lexeme."
+        processor._last_llm_repair_issues[term] = [
+            process_requirement1.QaIssue(
+                code="target_not_realized",
+                field="de_1",
+                severity="hard_fail",
+                message="de_1 does not realize target lexeme.",
+                evidence="Gamma heute.",
+            )
+        ]
         if term == "Gamma":
             processor._last_llm_repair_entries[term] = remembered_block
         return None
@@ -383,7 +423,15 @@ EEND"""
     monkeypatch.setattr(
         processor,
         "validate_entry_quality",
-        lambda entry: ["target_not_realized: de_1 does not realize target lexeme."] if "word: Gamma" in entry else [],
+        lambda entry: [
+            process_requirement1.QaIssue(
+                code="target_not_realized",
+                field="de_1",
+                severity="hard_fail",
+                message="de_1 does not realize target lexeme.",
+                evidence="Gamma heute.",
+            )
+        ] if "word: Gamma" in entry else [],
     )
 
     with pytest.raises(RuntimeError) as exc:
@@ -393,4 +441,36 @@ EEND"""
     text = output_file.read_text(encoding="utf-8")
     assert "## UNRESOLVED PART" in text
     assert "word: Gamma" in text
+
+
+def test_process_records_duplicate_rows_in_results(monkeypatch, tmp_path: Path) -> None:
+    output_file = tmp_path / "out.md"
+    processor = GermanVocabProcessor(
+        requirement_file=tmp_path / "req.md",
+        output_file=output_file,
+    )
+
+    clean_entry = """SSTART
+%VOCAB (German) ver 3
+word: Alpha
+meaning: Alpha = erste Sache / first thing
+de_1: Alpha ist heute wichtig.
+en_1: Alpha is important today.
+word_inf: Alpha
+Tags: noun
+EEND"""
+
+    monkeypatch.setattr(processor, "extract_word_list", lambda: ["Alpha", "Alpha"])
+    monkeypatch.setattr(processor, "parse_entry", lambda line: (line, None))
+    monkeypatch.setattr(processor, "enrich_phrase", lambda word: word)
+    monkeypatch.setattr(processor, "_resolve_entry_candidate", lambda *_args: ("entry", clean_entry))
+    monkeypatch.setattr(processor, "validate_entry_quality", lambda _entry: [])
+
+    processed, added, skipped = processor.process()
+
+    assert (processed, added, skipped) == (2, 1, 1)
+    payload = json.loads((tmp_path / "reports" / "nw1_qa_latest.json").read_text(encoding="utf-8"))
+    assert [row["resolution_status"] for row in payload["results"]] == ["clean", "clean"]
+    assert payload["results"][1]["write_disposition"] == "duplicate_skipped"
+    assert payload["results"][1]["duplicate_of_input_index"] == 0
 

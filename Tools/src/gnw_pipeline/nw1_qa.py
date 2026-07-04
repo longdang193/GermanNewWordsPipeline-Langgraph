@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Iterable, Literal, Mapping, Sequence
 
 Severity = Literal["hard_fail", "soft_review"]
 IssueSource = Literal["deterministic", "llm"]
+ResolutionStatus = Literal["clean", "unresolved_part", "omitted"]
+WriteDisposition = Literal["written", "duplicate_skipped", "omitted"]
 MatchMode = Literal[
     "phrase_contiguous_surface",
     "single_token",
@@ -105,6 +109,7 @@ class QaReportRow:
     word_inf: str
     start_line: int
     end_line: int
+    input_index: int | None = None
     issues: tuple[QaIssue, ...] = field(default_factory=tuple)
 
     def to_dict(self) -> dict[str, object]:
@@ -113,7 +118,38 @@ class QaReportRow:
             "word_inf": self.word_inf,
             "start_line": self.start_line,
             "end_line": self.end_line,
+            "input_index": self.input_index,
             "issues": [asdict(issue) for issue in self.issues],
+        }
+
+
+@dataclass(frozen=True)
+class Nw1ResultRow:
+    input_index: int
+    term: str
+    resolution_status: ResolutionStatus
+    origin_reason_code: str | None = None
+    final_blocker_code: str | None = None
+    final_blocker_codes: tuple[str, ...] = field(default_factory=tuple)
+    output_section: str | None = None
+    write_disposition: WriteDisposition = "written"
+    duplicate_of_input_index: int | None = None
+    start_line: int | None = None
+    end_line: int | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "input_index": self.input_index,
+            "term": self.term,
+            "resolution_status": self.resolution_status,
+            "origin_reason_code": self.origin_reason_code,
+            "final_blocker_code": self.final_blocker_code,
+            "final_blocker_codes": list(self.final_blocker_codes),
+            "output_section": self.output_section,
+            "write_disposition": self.write_disposition,
+            "duplicate_of_input_index": self.duplicate_of_input_index,
+            "start_line": self.start_line,
+            "end_line": self.end_line,
         }
 
 
@@ -222,6 +258,81 @@ def build_report_row(
         start_line=start_line,
         end_line=end_line,
         issues=tuple(deterministic_issues) + tuple(llm_issues),
+    )
+
+
+def summarize_report(
+    *,
+    results: Sequence[Nw1ResultRow | Mapping[str, object]],
+    issue_rows: Sequence[QaReportRow | Mapping[str, object]],
+) -> dict[str, object]:
+    resolution_counts = {"clean": 0, "unresolved_part": 0, "omitted": 0}
+    duplicate_count = 0
+    written_block_count = 0
+    for row in results:
+        resolution_status = row.resolution_status if isinstance(row, Nw1ResultRow) else str(row.get("resolution_status", ""))
+        if resolution_status in resolution_counts:
+            resolution_counts[resolution_status] += 1
+        write_disposition = row.write_disposition if isinstance(row, Nw1ResultRow) else str(row.get("write_disposition", ""))
+        if write_disposition == "duplicate_skipped":
+            duplicate_count += 1
+        if write_disposition == "written":
+            written_block_count += 1
+
+    return {
+        "result_count": len(results),
+        "issue_row_count": len(issue_rows),
+        "issue_count": sum(len(row.issues) if isinstance(row, QaReportRow) else len(row.get("issues", [])) for row in issue_rows),
+        "resolution_counts": resolution_counts,
+        "written_block_count": written_block_count,
+        "duplicate_count": duplicate_count,
+        "omitted_count": resolution_counts["omitted"],
+    }
+
+
+def load_report_payload(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {
+            "results": [],
+            "issue_rows": [],
+            "env": {},
+            "summary": summarize_report(results=(), issue_rows=()),
+        }
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Invalid NW1 report payload: {path}")
+
+    results = payload.get("results")
+    issue_rows = payload.get("issue_rows")
+    env = payload.get("env")
+    summary = payload.get("summary")
+    return {
+        "results": results if isinstance(results, list) else [],
+        "issue_rows": issue_rows if isinstance(issue_rows, list) else [],
+        "env": env if isinstance(env, dict) else {},
+        "summary": summary if isinstance(summary, dict) else summarize_report(results=(), issue_rows=()),
+    }
+
+
+def write_report_payload(
+    path: Path,
+    *,
+    results: Sequence[Nw1ResultRow | Mapping[str, object]],
+    issue_rows: Sequence[QaReportRow | Mapping[str, object]],
+    env: Mapping[str, object],
+) -> None:
+    payload = {
+        "results": [row.to_dict() if isinstance(row, Nw1ResultRow) else dict(row) for row in results],
+        "issue_rows": [row.to_dict() if isinstance(row, QaReportRow) else dict(row) for row in issue_rows],
+        "env": dict(env),
+        "summary": summarize_report(results=results, issue_rows=issue_rows),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
     )
 
 

@@ -27,6 +27,7 @@ from typing import Any, TextIO
 
 from notebooklm_errors import classify_notebooklm_error
 from mdproc.validation_core import iter_blocks
+from gnw_pipeline.nw1_steps import build_nw1_steps, has_parseable_nw1_blocks
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -193,12 +194,6 @@ def count_word_list_entries(path: Path) -> int:
     return count
 
 
-def has_parseable_nw1_blocks(path: Path) -> bool:
-    if not path.exists():
-        return False
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    return any(True for _ in iter_blocks(lines))
-
 def run_pipeline() -> int:
     logs_dir = ROOT / "Outputs" / "logs"
     reports_dir = ROOT / "Outputs" / "reports"
@@ -223,9 +218,11 @@ def run_pipeline() -> int:
         if legacy_word_file.exists():
             legacy_word_file.unlink()
 
+        nw1_generate, nw1_validate, nw1_qa_review = build_nw1_steps(root=ROOT)
+
         # NW1
         nw1 = run_cmd(
-            [sys.executable, str(SCRIPTS / "process_requirement1.py")],
+            nw1_generate.cmd,
             "NW1: Generate Outputs/01_words.md",
             log_fp=log_fp,
         )
@@ -236,7 +233,7 @@ def run_pipeline() -> int:
             print("\n[WARN] NW1 exited non-zero, but usable blocks exist. Continuing.")
 
         v1 = run_cmd(
-            [sys.executable, str(SCRIPTS / "validate_word_list.py")],
+            nw1_validate.cmd,
             "NW1: Validate Outputs/01_words.md",
             log_fp=log_fp,
         )
@@ -247,11 +244,8 @@ def run_pipeline() -> int:
             print("\n[WARN] NW1 validation failed, but usable blocks exist. Continuing.")
 
         if (ROOT / "Outputs" / "01_words.md").exists() and (ROOT / "Tools" / "scripts" / "nw1_qa_review.py").exists():
-            cmd = [sys.executable, str(SCRIPTS / "nw1_qa_review.py"), "--root", "."]
-            if os.environ.get("GNW_ENABLE_NW1_LLM_QA", "0") == "1":
-                cmd.append("--llm")
             run_cmd(
-                cmd,
+                nw1_qa_review.cmd,
                 "NW1: QA review",
                 log_fp=log_fp,
             )

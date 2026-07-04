@@ -11,7 +11,6 @@ This script:
 6. Rejects unreplaced template placeholders in vocabulary fields
 """
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -34,6 +33,8 @@ from mdproc.validation_core import (
     validate_unique_fields_per_block,
     validate_word_field_rules,
 )
+from gnw_pipeline.nw1_qa import load_report_payload
+from gnw_pipeline.nw1_quality_rules import find_generic_content_issues
 
 GENERIC_MEANING_MARKERS = (
     "konkrete Bedeutung im aktuellen Themenfeld",
@@ -126,6 +127,27 @@ def extract_unresolved_words(lines: list[str]) -> list[str]:
         uniq.append(w)
     return uniq
 
+def load_nw1_results(report_path: Path) -> tuple[list[dict[str, object]], list[str]]:
+    if not report_path.exists():
+        return [], [f"Missing NW1 report artifact: {report_path}"]
+
+    payload = load_report_payload(report_path)
+    results = payload["results"]
+    if not isinstance(results, list):
+        return [], [f"Invalid NW1 report results payload: {report_path}"]
+
+    issues: list[str] = []
+    for index, row in enumerate(results):
+        if not isinstance(row, dict):
+            issues.append(f"results[{index}] is not an object")
+            continue
+        for key in ("input_index", "term", "resolution_status", "origin_reason_code", "final_blocker_code"):
+            if key not in row:
+                issues.append(f"results[{index}] missing key '{key}'")
+        if row.get("resolution_status") not in {"clean", "unresolved_part", "omitted"}:
+            issues.append(f"results[{index}] has invalid resolution_status '{row.get('resolution_status')}'")
+    return results, issues
+
 def extract_word_list_source(requirement_path: Path, fallback_word_list_path: Path) -> tuple[str, str]:
     """Return raw word-list text and a human-readable source description."""
     content = requirement_path.read_text(encoding="utf-8")
@@ -198,34 +220,10 @@ def validate_no_template_placeholders(lines: list[str]) -> list[str]:
 
 def validate_no_generic_content(lines: list[str]) -> list[str]:
     """Reject generic/placeholder content that lacks real linguistic value."""
-    issues: list[str] = []
-
-    for field in iter_block_field_lines(lines):
-        line_num = field.line_number
-        field_name = field.field_name
-        field_value = field.field_value
-        if not field_value:
-            continue
-
-        # Check meaning field for generic markers.
-        if field_name == "meaning":
-            for marker in GENERIC_MEANING_MARKERS:
-                if marker in field_value:
-                    issues.append(
-                        f"Line {line_num}: Generic meaning detected in '{field_name}' -> '{field_value}'"
-                    )
-                    break
-
-        # Check de_1/en_1 for generic sentence patterns.
-        full_line = f"{field_name}: {field_value}"
-        for pattern in GENERIC_LINE_PATTERNS:
-            if pattern.match(full_line):
-                issues.append(
-                    f"Line {line_num}: Generic example sentence in '{field_name}' -> '{field_value}'"
-                )
-                break
-
-    return issues
+    return [
+        f"Line {issue.line_number}: {issue.message} -> '{issue.evidence}'"
+        for issue in find_generic_content_issues(lines)
+    ]
 
 
 def validate_noun_block_shape(lines: list[str]) -> list[str]:
@@ -289,6 +287,7 @@ def main() -> int:
 
     preferred_vocab_path = base_dir / "Outputs" / "01_words.md"
     legacy_vocab_path = base_dir / "01_words.md"
+    report_path = base_dir / "Outputs" / "reports" / "nw1_qa_latest.json"
 
     fallback_word_list_path = base_dir / "Inputs" / "Word List (DE).md"
 
@@ -337,7 +336,15 @@ def main() -> int:
     print(f"[INFO] Counting vocabulary blocks in: {vocab_path}")
     content = vocab_path.read_text(encoding="utf-8")
     lines = content.splitlines()
-    unresolved_words = extract_unresolved_words(lines)
+    results, report_issues = load_nw1_results(report_path)
+    unresolved_part_rows = [
+        row for row in results
+        if isinstance(row, dict) and row.get("resolution_status") == "unresolved_part"
+    ]
+    omitted_rows = [
+        row for row in results
+        if isinstance(row, dict) and row.get("resolution_status") == "omitted"
+    ]
     block_count, block_issues = analyze_block_structure(lines, label="vocabulary file")
     placeholder_issues = validate_no_template_placeholders(lines)
     word_hygiene_issues = validate_word_field_rules(lines)
@@ -402,17 +409,42 @@ def main() -> int:
         for issue in noun_shape_issues:
             print(f"      - {issue}")
 
+    if report_issues:
+        print("   [ERROR] NW1 report contract validation failed:")
+        for issue in report_issues:
+            print(f"      - {issue}")
+
     print("[INFO] Comparison:")
     print(f"   Word List (Requirement NW1): {unique_count} unique entries")
     print(f"   Vocabulary Blocks: {block_count} entries")
-    if unresolved_words:
-        print(f"   Unresolved (explicit): {len(unresolved_words)} entries")
+    if unresolved_part_rows:
+        print(f"   Unresolved part rows: {len(unresolved_part_rows)} entries")
+    if omitted_rows:
+        print(f"   Omitted rows: {len(omitted_rows)} entries")
 
     expected_covered = unique_count
 
-    if block_count == expected_covered and not unresolved_words and not block_issues and not placeholder_issues and not word_hygiene_issues and not meaning_field_issues and not generic_content_issues and not required_field_issues and not tag_order_issues and not blank_line_issues and not duplicate_field_issues and not noun_shape_issues and not drift_detected:
-        print("\n[OK] VALIDATION PASSED: all required entries generated with no unresolved items.")
-        print("   The generated vocabulary file is complete and path-consistent.\n")
+    has_structural_failure = any((
+        block_issues,
+        placeholder_issues,
+        word_hygiene_issues,
+        meaning_field_issues,
+        generic_content_issues,
+        required_field_issues,
+        tag_order_issues,
+        blank_line_issues,
+        duplicate_field_issues,
+        noun_shape_issues,
+        report_issues,
+    ))
+
+    if block_count == expected_covered and not omitted_rows and not has_structural_failure and not drift_detected:
+        if unresolved_part_rows:
+            print("\n[OK] VALIDATION PASSED: all required entries generated; unresolved-part review rows remain.")
+            print("   NW1 may continue because no entries were omitted and block schema is valid.\n")
+        else:
+            print("\n[OK] VALIDATION PASSED: all required entries generated with no omitted items.")
+            print("   The generated vocabulary file is complete and path-consistent.\n")
         return 0
 
     if block_count > unique_count:
@@ -425,9 +457,16 @@ def main() -> int:
         print(f"   Expected: {expected_covered} blocks")
         print(f"   Found: {block_count} blocks")
 
-    if unresolved_words:
-        print("\n[ERROR] UNRESOLVED ITEMS PRESENT: strict NW1 validation requires zero unresolved items.")
-        print(f"   Unresolved count: {len(unresolved_words)}")
+    if omitted_rows:
+        print("\n[ERROR] OMITTED ITEMS PRESENT: strict NW1 validation requires zero omitted items.")
+        print(f"   Omitted count: {len(omitted_rows)}")
+
+    if unresolved_part_rows:
+        print("\n[WARN] UNRESOLVED PART PRESENT: entries remain review-worthy but still written in valid block schema.")
+        print(f"   Unresolved-part count: {len(unresolved_part_rows)}")
+
+    if report_issues:
+        print("\n[ERROR] REPORT CONTRACT ERROR: regenerate NW1 report artifact before rerunning validation.")
 
     if drift_detected:
         print(
@@ -465,7 +504,7 @@ def main() -> int:
     if noun_shape_issues:
         print("\n[ERROR] NOUN BLOCK ERROR: noun blocks must not contain phrase-like words or bad guessed singular lemmas.")
 
-    print("\n   ACTION REQUIRED: fix issues and rerun validation.\n")
+    print("\n   ACTION REQUIRED: fix fatal issues and rerun validation.\n")
     return 1
 
 

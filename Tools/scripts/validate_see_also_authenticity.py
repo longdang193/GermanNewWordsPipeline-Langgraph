@@ -30,6 +30,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+from generate_requirement3_notebooklm import get_block_word
+
 
 BLOCK_START = "SSTART"
 BLOCK_END = "EEND"
@@ -97,11 +99,8 @@ def iter_blocks(lines: list[str]) -> Iterable[tuple[int, int, list[str]]]:
 
 
 def extract_word(block_lines: list[str]) -> str:
-    for raw in block_lines:
-        stripped = raw.strip()
-        if stripped.lower().startswith("word:"):
-            return stripped.split(":", 1)[1].strip()
-    return "<unknown>"
+    block_text = "\n".join(block_lines)
+    return get_block_word(block_text) or "<unknown>"
 
 
 def parse_nid_records(lines: list[str]) -> list[NidRecord]:

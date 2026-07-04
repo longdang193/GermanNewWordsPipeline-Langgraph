@@ -6,6 +6,8 @@ import subprocess
 import sys
 from typing import Any, TypedDict
 
+from gnw_pipeline.nw1_steps import build_nw1_steps, has_parseable_nw1_blocks
+
 
 class PipelineState(TypedDict, total=False):
     root: str
@@ -17,6 +19,8 @@ class PipelineState(TypedDict, total=False):
 class CommandStep:
     name: str
     cmd: list[str]
+    continue_on_parseable_blocks: bool = False
+    allow_nonzero: bool = False
 
 
 def _run_step(state: PipelineState, step: CommandStep) -> PipelineState:
@@ -31,29 +35,38 @@ def _run_step(state: PipelineState, step: CommandStep) -> PipelineState:
 
     proc = subprocess.run(step.cmd, cwd=str(root), env=env)
     if proc.returncode != 0:
+        if step.allow_nonzero:
+            state["last_step"] = step.name
+            return state
+        if step.continue_on_parseable_blocks and has_parseable_nw1_blocks(root / "Outputs" / "01_words.md"):
+            state["last_step"] = step.name
+            return state
         raise RuntimeError(f"step failed: {step.name} exit={proc.returncode}")
 
     state["last_step"] = step.name
     return state
 
 
-def build_graph() -> Any:
-    # Lazy import so Tools can be installed without langgraph extra.
-    from langgraph.graph import StateGraph, END  # type: ignore[import-not-found]
-    import os
-
-    graph = StateGraph(PipelineState)
-
-    root = Path(__file__).resolve().parents[3]
+def build_steps(root: Path) -> list[CommandStep]:
     scripts = root / "Tools" / "scripts"
-    qa_cmd = [sys.executable, str(scripts / "nw1_qa_review.py"), "--root", "."]
-    if os.environ.get("GNW_ENABLE_NW1_LLM_QA", "0") == "1":
-        qa_cmd.append("--llm")
+    nw1_generate, nw1_validate, nw1_qa_review = build_nw1_steps(root=root)
 
-    steps: list[CommandStep] = [
-        CommandStep("nw1_generate", [sys.executable, str(scripts / "process_requirement1.py")]),
-        CommandStep("nw1_validate", [sys.executable, str(scripts / "validate_word_list.py")]),
-        CommandStep("nw1_qa_review", qa_cmd),
+    return [
+        CommandStep(
+            nw1_generate.name,
+            nw1_generate.cmd,
+            continue_on_parseable_blocks=nw1_generate.continue_on_parseable_blocks,
+        ),
+        CommandStep(
+            nw1_validate.name,
+            nw1_validate.cmd,
+            continue_on_parseable_blocks=nw1_validate.continue_on_parseable_blocks,
+        ),
+        CommandStep(
+            nw1_qa_review.name,
+            nw1_qa_review.cmd,
+            allow_nonzero=nw1_qa_review.allow_nonzero,
+        ),
         CommandStep("nw2_process", ["py", "-m", "mdproc", "process", "Outputs/01_words.md", "--output", "Outputs/02_words_fixed.md"]),
         CommandStep("nw2_words", ["py", "-m", "mdproc", "words", "Outputs/02_words_fixed.md", "--output", "Outputs/03_word_list.md"]),
         CommandStep("nw3_query", [sys.executable, str(scripts / "query_see_also_notebooklm.py"), "--root", ".", "--mcp-url", "http://127.0.0.1:8010/mcp"]),
@@ -62,6 +75,15 @@ def build_graph() -> Any:
         CommandStep("nw4_process", [sys.executable, str(scripts / "process_requirement4.py")]),
         CommandStep("nw4_validate", [sys.executable, str(scripts / "validate_requirement4.py")]),
     ]
+
+
+def build_graph() -> Any:
+    # Lazy import so Tools can be installed without langgraph extra.
+    from langgraph.graph import StateGraph, END  # type: ignore[import-not-found]
+
+    graph = StateGraph(PipelineState)
+
+    steps = build_steps(Path(__file__).resolve().parents[3])
 
     for i, step in enumerate(steps):
         node_name = step.name

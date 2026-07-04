@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import sys
 from pathlib import Path
 
@@ -29,9 +28,11 @@ from gnw_pipeline.nw1_qa import (  # noqa: E402
     QaIssue,
     any_fail,
     build_report_row,
+    load_report_payload,
     normalize_llm_issue,
     qa_entry_from_fields,
     qa_entry_issues,
+    write_report_payload,
 )
 
 try:
@@ -107,7 +108,8 @@ def main() -> int:
         llm_settings = get_llm_runtime_settings(root=root, require_api_key=False)
 
     lines = input_path.read_text(encoding="utf-8", errors="replace").splitlines()
-    rows = []
+    existing_payload = load_report_payload(output_path)
+    issue_rows = []
 
     for block in iter_blocks(lines):
         block_fields = list(iter_block_fields(block))
@@ -121,7 +123,7 @@ def main() -> int:
             llm_issues = asyncio.run(_llm_issues_for_entry(entry, args.llm_model))
 
         if deterministic_issues or llm_issues:
-            rows.append(
+            issue_rows.append(
                 build_report_row(
                     entry=entry,
                     start_line=block.start_line,
@@ -131,22 +133,26 @@ def main() -> int:
                 )
             )
 
-    payload = {
-        "input": str(input_path),
-        "rows": [row.to_dict() for row in rows],
-        "row_count": len(rows),
-        "issue_count": sum(len(row.issues) for row in rows),
-        "env": {
+    env = dict(existing_payload["env"])
+    env.update(
+        {
+            "report_stage": "nw1_qa_review",
             "openai_api_key_present": bool(llm_settings.api_key) if llm_settings is not None else False,
-        },
-    }
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+            "input": str(input_path),
+        }
+    )
+    write_report_payload(
+        output_path,
+        results=tuple(existing_payload["results"]),
+        issue_rows=issue_rows,
+        env=env,
+    )
 
-    if payload["issue_count"]:
-        print(f"[WARN] NW1 QA found {payload['issue_count']} issues. Report: {output_path}")
+    issue_count = sum(len(row.issues) for row in issue_rows)
+    if issue_count:
+        print(f"[WARN] NW1 QA found {issue_count} issues. Report: {output_path}")
         if args.fail_on_issues:
-            all_issues = [issue for row in rows for issue in row.issues]
+            all_issues = [issue for row in issue_rows for issue in row.issues]
             if any_fail(all_issues):
                 return 1
     else:

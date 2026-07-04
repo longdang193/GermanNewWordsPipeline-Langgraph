@@ -162,14 +162,16 @@ python scripts/validate_word_list.py
 - Deduplicates words in the list (case-insensitive)
 - Counts unique words/phrases in the Word List
 - Counts strict SSTART...EEND blocks in `Outputs/01_words.md`
-- Fails if any `UNRESOLVED_JSON` items remain
+- Reads `Outputs/reports/nw1_qa_latest.json` for NW1 result status truth
+- Fails on omitted rows or invalid block/report structure
+- Allows `## UNRESOLVED PART` rows when block schema stays valid
 - Rejects legacy START...END block markers
 - Rejects unreplaced template placeholders (for example: `[simple German meaning(s)]`, `[form]`)
 - Compares counts to ensure completeness
 
 **Exit codes:**
-- `0` = Validation passed (exact block count match, zero unresolved items)
-- `1` = Validation failed (missing entries, unresolved items, or file not found)
+- `0` = Validation passed (exact block count match, zero omitted rows, valid block/report structure)
+- `1` = Validation failed (missing entries, omitted rows, invalid block/report structure, or file not found)
 
 **When to use:**
 - Before running Requirement 2 (mandatory validation step)
