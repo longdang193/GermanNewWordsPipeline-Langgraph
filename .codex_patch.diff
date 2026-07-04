@@ -1,0 +1,26 @@
+*** Begin Patch
+*** Update File: Tools/scripts/process_requirement1.py
+@@
+         "Arbeitsbedingungen": {"tags": "noun", "meaning": "Arbeitsbedingungen = Umstaende, unter denen Menschen arbeiten / working conditions", "de_1": "Die Arbeitsbedingungen sind viel besser geworden, und das merkt man im Alltag.", "en_1": "The working conditions have become much better, and you can feel it every day.", "word_inf": "die Arbeitsbedingungen", "noun_gender": "die (plural)", "noun_genetiv": "der Arbeitsbedingungen", "noun_plural": "Arbeitsbedingungen", "noun_forms": "-"},
+         "Art und Weise": {"tags": "phrase", "meaning": "Art und Weise = die Methode oder Form, wie etwas gemacht wird / way, manner", "de_1": "Die Art und Weise, wie Sie das erklaert haben, war echt hilfreich.", "en_1": "The way you explained that was really helpful.", "word_inf": "die Art und Weise"},
+         "beanspruchen": {"tags": "verb", "meaning": "beanspruchen = etwas fuer sich verlangen oder viel Zeit/Kraft erfordern / to claim, to take up", "de_1": "Der Antrag beansprucht mehr Zeit, als ich zuerst dachte.", "en_1": "The application takes more time than I first thought.", "word_inf": "beanspruchen", "verb_present": "beansprucht", "verb_past": "beanspruchte", "verb_perfect": "hat beansprucht"},
+         "begründen": {"tags": "verb", "meaning": "begründen = einen Grund fuer eine Entscheidung oder Meinung nennen / to justify, give reasons", "de_1": "Koennen Sie kurz begruenden, warum der Termin nicht passt?", "en_1": "Can you briefly explain why the appointment does not work?", "word_inf": "begründen", "verb_present": "begründet", "verb_past": "begründete", "verb_perfect": "hat begründet"},
+         "Benefizkonzert": {"tags": "noun", "meaning": "Benefizkonzert = Konzert, dessen Einnahmen fuer einen guten Zweck bestimmt sind / charity concert", "de_1": "Beim Benefizkonzert kommt hoffentlich genug Geld fuer das neue Jugendprojekt zusammen.", "en_1": "At the charity concert, hopefully enough money will be raised for the new youth project.", "word_inf": "das Benefizkonzert", "noun_gender": "das", "noun_genetiv": "des Benefizkonzerts", "noun_plural": "Benefizkonzerte", "noun_forms": "-s, -e"},
+         "Bereichen": {"tags": "noun", "meaning": "Bereich = abgegrenztes Thema, Gebiet oder Arbeitsfeld / area, field", "de_1": "In diesen Bereichen fehlt uns noch etwas Erfahrung.", "en_1": "We still lack a bit of experience in these areas.", "word_inf": "der Bereich", "noun_gender": "der", "noun_genetiv": "des Bereichs", "noun_plural": "Bereiche", "noun_forms": "-s, -e"},
++        "Einheimische": {"tags": "noun", "meaning": "Einheimische = Menschen, die aus einem Ort oder einer Region stammen / locals, native residents", "de_1": "Die Einheimischen kennen die besten Wege durch die Altstadt.", "en_1": "The locals know the best routes through the old town.", "word_inf": "die Einheimischen", "noun_gender": "die (plural)", "noun_genetiv": "-", "noun_plural": "Einheimischen", "noun_forms": "-"},
+         "berichten über": {"tags": "phrase", "meaning": "ueber etwas berichten = Informationen zu einem Thema weitergeben / to report on something", "de_1": "Morgen berichte ich im Team kurz ueber den Stand der Dinge.", "en_1": "Tomorrow I will briefly report to the team on the current status.", "word_inf": "über etwas berichten"},
+*** Update File: Tools/scripts/validate_word_list.py
+@@
+         if (
+             len(tokens) == 1
+             and tokens[0]
+             and tokens[0][0].isupper()
+             and word_inf_value.startswith("der ")
+             and word_inf_value.removeprefix("der ").strip() == word_value
+-            and word_value.endswith(("e", "en"))
++            and word_value.endswith("e")
+         ):
+             issues.append(
+                 f"Line {word_line}: noun block likely guessed a bad masculine lemma -> '{word_value}' / '{word_inf_value}'"
+             )
+*** End Patch

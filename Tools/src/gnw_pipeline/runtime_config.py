@@ -4,10 +4,12 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-
 @dataclass(frozen=True)
 class Nw1RuntimeConfig:
     parallelism: int = 1
+    enable_llm_enrich: bool = True
+    llm_repair_max_attempts: int = 1
+    llm_repair_print_trace: bool = False
 
 @dataclass(frozen=True)
 class Nw3RuntimeConfig:
@@ -16,11 +18,9 @@ class Nw3RuntimeConfig:
     min_see_also_entries: int = 3
     max_see_also_entries: int = 5
 
-
 @dataclass(frozen=True)
 class LlmRuntimeConfig:
     prompted_structured_output_model_prefixes: tuple[str, ...] = ("deepseek-v4-",)
-
 
 @dataclass(frozen=True)
 class RuntimeConfig:
@@ -58,8 +58,20 @@ def load_runtime_config(*, root: Path | None = None) -> RuntimeConfig:
         llm_raw = {}
 
     def _int(source: dict[str, object], key: str, default: int) -> int:
-        v = source.get(key, default)
-        return int(v) if isinstance(v, (int, float, str)) and str(v).strip() else default
+        value = source.get(key, default)
+        return int(value) if isinstance(value, (int, float, str)) and str(value).strip() else default
+
+    def _bool(source: dict[str, object], key: str, default: bool) -> bool:
+        value = source.get(key, default)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off"}:
+                return False
+        return default
 
     prefixes_raw = llm_raw.get("prompted_structured_output_model_prefixes", ("deepseek-v4-",))
     prefixes: list[str] = []
@@ -74,6 +86,9 @@ def load_runtime_config(*, root: Path | None = None) -> RuntimeConfig:
 
     nw1 = Nw1RuntimeConfig(
         parallelism=max(1, _int(nw1_raw, "parallelism", 1)),
+        enable_llm_enrich=_bool(nw1_raw, "enable_llm_enrich", True),
+        llm_repair_max_attempts=max(1, _int(nw1_raw, "llm_repair_max_attempts", 1)),
+        llm_repair_print_trace=_bool(nw1_raw, "llm_repair_print_trace", False),
     )
 
     nw3 = Nw3RuntimeConfig(

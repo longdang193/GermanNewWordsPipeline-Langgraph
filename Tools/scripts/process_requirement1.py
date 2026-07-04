@@ -9,7 +9,7 @@ import sys
 import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import List, Tuple, Optional, Mapping
+from typing import Any, List, Tuple, Optional, Mapping
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -19,6 +19,7 @@ if str(SRC_DIR) not in sys.path:
 
 
 from gnw_pipeline.runtime_config import load_runtime_config
+from gnw_pipeline.nw1_qa import qa_entry_from_block_text, qa_entry_issues
 from mdproc.validation_core import validate_meaning_field_rules
 
 class GermanVocabProcessor:
@@ -26,6 +27,11 @@ class GermanVocabProcessor:
 
     existing_words: set[str]
     OverrideMap = Mapping[str, str | None]
+
+    UNRESOLVED_REASON_MISSING_MEANING = "missing_meaning"
+    UNRESOLVED_REASON_MISSING_DE_EXAMPLE = "missing_de_example"
+    UNRESOLVED_REASON_MISSING_EN_EXAMPLE = "missing_en_example"
+    UNRESOLVED_REASON_LLM_AUTH_FAILED = "llm_auth_failed"
 
     MEANING_OVERRIDES = {
         "Einarbeitung": "Einarbeitung = Zeit und Prozess, in dem jemand in neue Aufgaben eingefuehrt wird / onboarding, training period",
@@ -1232,6 +1238,7 @@ class GermanVocabProcessor:
         "begründen": {"tags": "verb", "meaning": "begründen = einen Grund fuer eine Entscheidung oder Meinung nennen / to justify, give reasons", "de_1": "Koennen Sie kurz begruenden, warum der Termin nicht passt?", "en_1": "Can you briefly explain why the appointment does not work?", "word_inf": "begründen", "verb_present": "begründet", "verb_past": "begründete", "verb_perfect": "hat begründet"},
         "Benefizkonzert": {"tags": "noun", "meaning": "Benefizkonzert = Konzert, dessen Einnahmen fuer einen guten Zweck bestimmt sind / charity concert", "de_1": "Beim Benefizkonzert kommt hoffentlich genug Geld fuer das neue Jugendprojekt zusammen.", "en_1": "At the charity concert, hopefully enough money will be raised for the new youth project.", "word_inf": "das Benefizkonzert", "noun_gender": "das", "noun_genetiv": "des Benefizkonzerts", "noun_plural": "Benefizkonzerte", "noun_forms": "-s, -e"},
         "Bereichen": {"tags": "noun", "meaning": "Bereich = abgegrenztes Thema, Gebiet oder Arbeitsfeld / area, field", "de_1": "In diesen Bereichen fehlt uns noch etwas Erfahrung.", "en_1": "We still lack a bit of experience in these areas.", "word_inf": "der Bereich", "noun_gender": "der", "noun_genetiv": "des Bereichs", "noun_plural": "Bereiche", "noun_forms": "-s, -e"},
+        "Einheimische": {"tags": "noun", "meaning": "Einheimische = Menschen, die aus einem Ort oder einer Region stammen / locals, native residents", "de_1": "Die Einheimischen kennen die besten Wege durch die Altstadt.", "en_1": "The locals know the best routes through the old town.", "word_inf": "die Einheimischen", "noun_gender": "die (plural)", "noun_genetiv": "-", "noun_plural": "Einheimischen", "noun_forms": "-"},
         "berichten über": {"tags": "phrase", "meaning": "ueber etwas berichten = Informationen zu einem Thema weitergeben / to report on something", "de_1": "Morgen berichte ich im Team kurz ueber den Stand der Dinge.", "en_1": "Tomorrow I will briefly report to the team on the current status.", "word_inf": "über etwas berichten"},
         "Beschluss": {"tags": "noun", "meaning": "Beschluss = offiziell getroffene Entscheidung, oft in einer Sitzung / resolution, decision", "de_1": "Nach der Diskussion war der Beschluss schnell klar.", "en_1": "After the discussion, the decision was clear quickly.", "word_inf": "der Beschluss", "noun_gender": "der", "noun_genetiv": "des Beschlusses", "noun_plural": "Beschlüsse", "noun_forms": "-es, -¨e"},
         "Brauch": {"tags": "noun", "meaning": "Brauch = traditionelle Gewohnheit in einer Gruppe oder Region / custom, tradition", "de_1": "In unserer Familie ist dieser Brauch immer noch wichtig.", "en_1": "In our family, this custom is still important.", "word_inf": "der Brauch", "noun_gender": "der", "noun_genetiv": "des Brauchs", "noun_plural": "Bräuche", "noun_forms": "-s, -¨e"},
@@ -1496,6 +1503,8 @@ class GermanVocabProcessor:
         self.requirement_file = requirement_file
         self.output_file = output_file
         self.existing_words = set()
+        self._last_llm_repair_issues: dict[str, str] = {}
+        self._last_llm_repair_entries: dict[str, str] = {}
 
     def load_existing_words(self) -> None:
         """Load existing words from output file to avoid duplicates."""
@@ -1606,6 +1615,21 @@ class GermanVocabProcessor:
                 return cleaned[len(article):].strip()
         return cleaned
 
+    def _noun_word_shape_issue(self, word_value: str, word_inf_value: str) -> str | None:
+        """Reject noun display words that still look like phrases or fragments."""
+        tokens = word_value.split()
+
+        if any(ch in word_value for ch in ("?", "!", "…")):
+            return f"noun block word looks sentence-like -> '{word_value}'"
+
+        has_lowercase_later_token = len(tokens) > 1 and any(token and token[0].islower() for token in tokens[1:])
+        if has_lowercase_later_token:
+            starts_with_article = bool(tokens) and tokens[0].casefold() in {"der", "die", "das"}
+            if not (starts_with_article and word_value.casefold().strip() == word_inf_value.casefold().strip()):
+                return f"noun block word looks like a phrase, not a noun lemma -> '{word_value}'"
+
+        return None
+
     def build_override_entry(self, word: str, override: OverrideMap) -> str:
         """Build a complete block from lexical override data."""
         tags = override["tags"]
@@ -1617,8 +1641,7 @@ class GermanVocabProcessor:
         )
         de_1 = override["de_1"]
         en_1 = override["en_1"]
-        display_word = self.strip_leading_article(
-            word) if tags == "noun" else word
+        display_word = word.strip()
 
         if tags == "noun":
             return f"""SSTART
@@ -1822,19 +1845,49 @@ EEND"""
     def validate_entry_quality(self, entry: str) -> list[str]:
         """Return quality issues for one generated block."""
         issues: list[str] = []
+        word_value: str | None = None
+        word_inf_value: str | None = None
+        tags_value: str | None = None
         for marker in self.BAD_OUTPUT_MARKERS:
             if marker in entry:
                 issues.append(f"contains generic marker: '{marker}'")
 
         for raw_line in entry.splitlines():
             line = raw_line.strip()
+            if line.startswith("word: "):
+                word_value = line.split(": ", 1)[1].strip()
+            elif line.startswith("word_inf: "):
+                word_inf_value = line.split(": ", 1)[1].strip()
+            elif line.startswith("Tags: "):
+                tags_value = line.split(": ", 1)[1].strip().lower()
             for pattern in self.BAD_LINE_PATTERNS:
                 if pattern.match(line):
                     issues.append(f"contains generic fallback line: '{line}'")
                     break
 
+        if tags_value == "noun" and word_value:
+            noun_shape_issue = self._noun_word_shape_issue(word_value, word_inf_value or "")
+            if noun_shape_issue is not None:
+                issues.append(noun_shape_issue)
+
         issues.extend(validate_meaning_field_rules(entry.splitlines()))
+        qa_entry = qa_entry_from_block_text(entry)
+        if qa_entry is not None:
+            issues.extend(
+                f"{qa_issue.code}: {qa_issue.message}"
+                for qa_issue in qa_entry_issues(qa_entry)
+                if qa_issue.severity == "hard_fail"
+            )
         return issues
+
+    def _issue_codes(self, issues: list[str]) -> list[str]:
+        codes: list[str] = []
+        for issue in issues:
+            code, _sep, _rest = issue.partition(":")
+            normalized = code.strip()
+            if normalized and normalized not in codes:
+                codes.append(normalized)
+        return codes
 
     def print_quality_examples(self) -> None:
         """Print concrete quality guidance with bad vs good examples."""
@@ -1980,7 +2033,7 @@ EEND"""
         # This is a simplified version - in production, you'd want proper linguistic analysis
         # For now, providing templates that need to be filled
 
-        display_word = self.strip_leading_article(word)
+        display_word = word.strip()
 
         # Extract base noun without article
         parts = word.split()
@@ -2070,7 +2123,7 @@ EEND"""
         self,
         enriched_word: str,
         meaning: Optional[str],
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str | dict[str, str]]:
         """Resolve one term into entry text or explicit unresolved marker."""
         try:
             override = self.get_override(enriched_word)
@@ -2083,6 +2136,14 @@ EEND"""
             if pos == 'verb':
                 return ("entry", self.generate_verb_entry(enriched_word, meaning))
             return ("entry", self.generate_other_entry(enriched_word, meaning))
+        except RuntimeError as exc:
+            if "NW1 LLM authentication failed" not in str(exc):
+                raise
+            return ("unresolved", {
+                "term": enriched_word,
+                "reason_code": self.UNRESOLVED_REASON_LLM_AUTH_FAILED,
+                "detail": str(exc),
+            })
         except ValueError as exc:
             msg = str(exc)
             if "Missing LLM-authored" not in msg:
@@ -2093,8 +2154,46 @@ EEND"""
                 meaning_hint=meaning,
             )
             if llm_override is None:
-                return ("unresolved", enriched_word)
+                reason_code = self.UNRESOLVED_REASON_MISSING_MEANING
+                if "German example" in msg:
+                    reason_code = self.UNRESOLVED_REASON_MISSING_DE_EXAMPLE
+                elif "English example" in msg:
+                    reason_code = self.UNRESOLVED_REASON_MISSING_EN_EXAMPLE
+                blocker_text = self._last_llm_repair_issues.pop(enriched_word, "")
+                remembered_entry = self._last_llm_repair_entries.pop(enriched_word, None)
+                blocker_codes = self._issue_codes([blocker_text]) if blocker_text else []
+                if remembered_entry and qa_entry_from_block_text(remembered_entry) is not None:
+                    return ("unresolved_entry", {
+                        "term": enriched_word,
+                        "reason_code": reason_code,
+                        "origin_reason_code": reason_code,
+                        "final_blocker_code": blocker_codes[0] if blocker_codes else None,
+                        "final_blocker_codes": blocker_codes,
+                        "detail": msg,
+                        "entry": remembered_entry,
+                    })
+                return ("unresolved", {
+                    "term": enriched_word,
+                    "reason_code": reason_code,
+                    "origin_reason_code": reason_code,
+                    "final_blocker_code": blocker_codes[0] if blocker_codes else None,
+                    "final_blocker_codes": blocker_codes,
+                    "detail": msg,
+                })
             return ("entry", self.build_override_entry(enriched_word, llm_override))
+
+    def _format_unresolved_summary(self, unresolved: list[dict[str, object]]) -> str:
+        buckets: dict[str, list[str]] = {}
+        for item in unresolved:
+            reason_code = str(item["reason_code"])
+            term = str(item["term"])
+            buckets.setdefault(reason_code, []).append(term)
+
+        lines = ["NW1 generation failed: unresolved entries remain."]
+        for reason_code in sorted(buckets):
+            samples = ", ".join(buckets[reason_code][:3])
+            lines.append(f"- {reason_code}: {len(buckets[reason_code])} [{samples}]")
+        return "\n".join(lines)
 
     def process(self) -> Tuple[int, int, int]:
         """Process the word list and generate vocabulary entries."""
@@ -2105,9 +2204,9 @@ EEND"""
         word_list = self.extract_word_list()
 
         # Build independent work items in original order, with deterministic dedupe.
-        entries: list[str] = []
-        quality_issues: list[str] = []
-        unresolved: list[str] = []
+        entries_clean: list[str] = []
+        entries_unresolved_part: list[str] = []
+        unresolved: list[dict[str, object]] = []
         processed = len(word_list)
         added = 0
         skipped = 0
@@ -2141,85 +2240,129 @@ EEND"""
             if status == "unresolved":
                 unresolved.append(payload)
                 continue
+            if status == "unresolved_entry":
+                entries_unresolved_part.append(str(payload["entry"]))
+                added += 1
+                continue
 
             entry = payload
             entry_issues = self.validate_entry_quality(entry)
             if entry_issues:
-                joined = "; ".join(entry_issues)
-                quality_issues.append(f"word '{enriched_word}': {joined}")
-
-            entries.append(entry)
+                blocker_codes = self._issue_codes(entry_issues)
+                entries_unresolved_part.append(entry)
+            else:
+                entries_clean.append(entry)
             added += 1
 
-        if quality_issues:
-            self.print_quality_examples()
-            details = "\n".join(f"- {issue}" for issue in quality_issues[:10])
-            raise ValueError(
-                "Generated entries failed quality checks:\n"
-                f"{details}\n"
-                "(showing first 10 issues)"
+        # Write to file
+        if entries_clean or entries_unresolved_part:
+            self.write_entries(
+                entries_clean,
+                entries_unresolved_part,
+                processed,
+                added,
+                skipped,
+                unresolved,
             )
 
-        # Write to file
-        self.write_entries(entries, processed, added, skipped, unresolved)
+        if unresolved:
+            raise RuntimeError(self._format_unresolved_summary(unresolved))
 
         return processed, added, skipped
 
-    def write_entries(self, entries: List[str], processed: int, added: int, skipped: int, unresolved: list[str]) -> None:
+    def write_entries(
+        self,
+        entries_clean: List[str],
+        entries_unresolved_part: List[str],
+        processed: int,
+        added: int,
+        skipped: int,
+        unresolved: list[dict[str, object]],
+    ) -> None:
         """Write entries to output file."""
         self.output_file.parent.mkdir(parents=True, exist_ok=True)
 
         with self.output_file.open('w', encoding='utf-8', newline='\n') as f:
             f.write("TARGET DECK: TEST\n\n")
 
-            for entry in entries:
+            for entry in entries_clean:
                 f.write(entry)
                 f.write('\n\n')
+
+            if entries_unresolved_part:
+                f.write("## UNRESOLVED PART\n\n")
+                for entry in entries_unresolved_part:
+                    f.write(entry)
+                    f.write('\n\n')
 
             # Add summary comment
             summary = f"<!-- processed: {processed} | added: {added} | skipped (duplicates): {skipped} -->\n"
             f.write(summary)
-            if unresolved:
-                uniq = []
-                seen = set()
-                for w in unresolved:
-                    k = w.casefold()
-                    if k in seen:
-                        continue
-                    seen.add(k)
-                    uniq.append(w)
-                payload = json.dumps(uniq, ensure_ascii=False)
-                f.write(f"<!-- UNRESOLVED_JSON: {payload} -->\n")
 
     def try_llm_enrich_override(self, *, term: str, meaning_hint: Optional[str]) -> Optional[OverrideMap]:
         """LLM enrich term into override dict; returns None if disabled/unavailable."""
-        if os.environ.get("GNW_ENABLE_NW1_LLM_ENRICH", "1") != "1":
+        repo_root = SCRIPT_DIR.parent.parent
+        nw1_config = load_runtime_config(root=repo_root).nw1
+        self._last_llm_repair_issues.pop(term, None)
+        self._last_llm_repair_entries.pop(term, None)
+        if not nw1_config.enable_llm_enrich:
             return None
         try:
             from gnw_pipeline.llm_runtime import classify_openai_compatible_error
             from gnw_pipeline.nw1_llm_enrich import llm_enrich_term
         except Exception:
             return None
-        try:
-            enriched = llm_enrich_term(term=term, meaning_hint=meaning_hint or None)
-        except Exception as exc:
-            if classify_openai_compatible_error(exc) == "auth":
-                raise RuntimeError(
-                    "NW1 LLM authentication failed. "
-                    "Update OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL and rerun."
-                ) from exc
-            return None
-        data = enriched.model_dump()
-        data["tags"] = data.pop("tags")
 
-        try:
-            preview_entry = self.build_override_entry(term, data)
-        except ValueError:
-            return None
+        max_attempts = nw1_config.llm_repair_max_attempts
+        should_print_trace = nw1_config.llm_repair_print_trace
+        if should_print_trace:
+            print(f"NW1 repair: trying LLM enrich for '{term}'")
 
-        if self.validate_entry_quality(preview_entry):
-            return None
-        return data
+        repeated_quality_issue: str | None = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                enriched = llm_enrich_term(term=term, meaning_hint=meaning_hint or None)
+            except Exception as exc:
+                if classify_openai_compatible_error(exc) == "auth":
+                    raise RuntimeError(
+                        "NW1 LLM authentication failed. "
+                        "Update OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL and rerun."
+                    ) from exc
+                if should_print_trace:
+                    print(f"NW1 repair retry {attempt}/{max_attempts} for '{term}': {exc}")
+                continue
+
+            data = enriched.model_dump()
+            data["tags"] = data.pop("tags")
+
+            try:
+                preview_entry = self.build_override_entry(term, data)
+            except ValueError as exc:
+                if should_print_trace:
+                    print(f"NW1 repair retry {attempt}/{max_attempts} for '{term}': {exc}")
+                continue
+
+            entry_issues = self.validate_entry_quality(preview_entry)
+            self._last_llm_repair_entries[term] = preview_entry
+            if entry_issues:
+                issue_text = "; ".join(entry_issues)
+                self._last_llm_repair_issues[term] = issue_text
+                if should_print_trace:
+                    print(f"NW1 repair retry {attempt}/{max_attempts} for '{term}': {issue_text}")
+                if repeated_quality_issue == issue_text:
+                    break
+                repeated_quality_issue = issue_text
+                continue
+
+            self._last_llm_repair_issues.pop(term, None)
+            self._last_llm_repair_entries.pop(term, None)
+            if should_print_trace:
+                print(f"NW1 repair succeeded for '{term}'")
+            return data
+
+        if should_print_trace:
+            print(f"NW1 repair failed for '{term}' after {max_attempts} attempts")
+        return None
 
 
 def main() -> int:
@@ -2264,3 +2407,8 @@ def main() -> int:
 
 if __name__ == '__main__':
     sys.exit(main())
+
+
+
+
+

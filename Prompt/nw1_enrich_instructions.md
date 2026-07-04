@@ -9,6 +9,10 @@ Output rules:
   - For nouns, do not define the noun using the noun itself. Bad: "der Meeresspiegel = Meeresspiegel / sea level".
   - For nouns, the German gloss must be a simple B1-level explanation first, then the English gloss after "/".
 - `de_1` must be natural spoken German (B1–B2), German-only (no English helper words).
+  - It must be one complete sentence, not a bare word, bare phrase, or dictionary fragment.
+  - It must end with `.`, `!`, or `?`.
+  - Do not use ellipsis `...` or `…`.
+  - It must use target term directly in sentence, not only paraphrase meaning.
 - `en_1` must be translation of `de_1` (not definition).
 - `word_inf`:
   - noun: include article "der/die/das <Lemma>"

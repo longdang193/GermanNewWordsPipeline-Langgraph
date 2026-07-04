@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import textwrap
+import json
+import subprocess
+import sys
+from pathlib import Path
 
 from mdproc.validation_core import (
     analyze_block_structure,
@@ -274,11 +278,180 @@ def test_nw1_qa_detects_mixed_language_de1() -> None:
     assert issues[0].code == "mixed_language_de1"
 
 
+def test_nw1_qa_rejects_fragment_without_terminal_punctuation() -> None:
+    from gnw_pipeline.nw1_qa import QaEntry, qa_entry_issues
+
+    entry = QaEntry(
+        word="Leidenschaft",
+        meaning="Leidenschaft = starkes Gefühl / passion",
+        de_1="voller Leidenschaft und mit ganzem Einsatz",
+        en_1="with passion and full commitment",
+        word_inf="Leidenschaft",
+        tags=("noun",),
+    )
+
+    issues = qa_entry_issues(entry)
+
+    assert any(issue.code == "missing_terminal_punctuation" for issue in issues)
+
+
+def test_nw1_qa_rejects_terminal_comma() -> None:
+    from gnw_pipeline.nw1_qa import QaEntry, qa_entry_issues
+
+    entry = QaEntry(
+        word="Leidenschaft",
+        meaning="Leidenschaft = starkes Gefühl / passion",
+        de_1="Er arbeitet voller Leidenschaft,",
+        en_1="He works with passion,",
+        word_inf="Leidenschaft",
+        tags=("noun",),
+    )
+
+    issues = qa_entry_issues(entry)
+
+    assert any(issue.code == "bad_terminal_punctuation" for issue in issues)
+
+
+def test_nw1_qa_marks_punctuated_fragment_for_soft_review() -> None:
+    from gnw_pipeline.nw1_qa import QaEntry, qa_entry_issues
+
+    entry = QaEntry(
+        word="Leidenschaft",
+        meaning="Leidenschaft = starkes Gefühl / passion",
+        de_1="Voller Leidenschaft und mit ganzem Einsatz.",
+        en_1="With passion and full commitment.",
+        word_inf="Leidenschaft",
+        tags=("noun",),
+    )
+
+    issues = qa_entry_issues(entry)
+
+    assert any(issue.code == "no_predicate_cue" and issue.severity == "soft_review" for issue in issues)
+
+
+def test_nw1_qa_rejects_phrase_paraphrase_without_target_realization() -> None:
+    from gnw_pipeline.nw1_qa import QaEntry, qa_entry_issues
+
+    entry = QaEntry(
+        word="eine warme Umgebung",
+        meaning="eine warme Umgebung = ein angenehmer, warmer Ort / a warm environment",
+        de_1="Ein freundlicher, fürsorglicher Ort.",
+        en_1="A friendly, caring place.",
+        word_inf="eine warme Umgebung",
+        tags=("phrase",),
+    )
+
+    issues = qa_entry_issues(entry)
+
+    assert any(issue.code == "target_not_realized" for issue in issues)
+
+
+def test_nw1_qa_accepts_inflected_phrase_realization() -> None:
+    from gnw_pipeline.nw1_qa import QaEntry, qa_entry_issues
+
+    entry = QaEntry(
+        word="eine warme Umgebung",
+        meaning="eine warme Umgebung = ein angenehmer, warmer Ort / a warm environment",
+        de_1="In so einer warmen Umgebung fühlen sich Pflanzen wohl.",
+        en_1="Plants feel comfortable in such a warm environment.",
+        word_inf="eine warme Umgebung",
+        tags=("phrase",),
+    )
+
+    issues = qa_entry_issues(entry)
+
+    assert issues == []
+
+
+def test_nw1_qa_rejects_non_contiguous_phrase_tokens() -> None:
+    from gnw_pipeline.nw1_qa import QaEntry, qa_entry_issues
+
+    entry = QaEntry(
+        word="eine warme Umgebung",
+        meaning="eine warme Umgebung = ein angenehmer, warmer Ort / a warm environment",
+        de_1="Eine warme Decke verbessert später die Umgebung im Zimmer.",
+        en_1="A warm blanket later improves the environment in the room.",
+        word_inf="eine warme Umgebung",
+        tags=("phrase",),
+    )
+
+    issues = qa_entry_issues(entry)
+
+    assert any(issue.code == "target_not_realized" for issue in issues)
+
+
+def test_nw1_qa_accepts_stored_split_verb_form() -> None:
+    from gnw_pipeline.nw1_qa import QaEntry, qa_entry_issues
+
+    entry = QaEntry(
+        word="zugreifen",
+        meaning="zugreifen = Zugriff nehmen / to access",
+        de_1="Er greift sofort zu.",
+        en_1="He accesses it immediately.",
+        word_inf="zugreifen",
+        tags=("verb",),
+        verb_present="greift zu",
+        verb_past="griff zu",
+        verb_perfect="hat zugegriffen",
+    )
+
+    issues = qa_entry_issues(entry)
+
+    assert issues == []
+
+
+def test_nw1_qa_report_uses_unified_rows_schema(tmp_path: Path) -> None:
+    input_path = tmp_path / "Outputs" / "01_words.md"
+    output_path = tmp_path / "Outputs" / "reports" / "nw1_qa_latest.json"
+    input_path.parent.mkdir(parents=True, exist_ok=True)
+    input_path.write_text(
+        dedent(
+            """
+            SSTART
+            word: eine warme Umgebung
+            meaning: eine warme Umgebung = ein angenehmer, warmer Ort / a warm environment
+            de_1: Ein freundlicher, fürsorglicher Ort.
+            en_1: A friendly, caring place.
+            word_inf: eine warme Umgebung
+            Tags: phrase
+            EEND
+            """
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).resolve().parents[1] / "scripts" / "nw1_qa_review.py"),
+            "--root",
+            str(tmp_path),
+            "--output",
+            str(output_path.relative_to(tmp_path)),
+        ],
+        cwd=str(Path(__file__).resolve().parents[2]),
+        text=True,
+        capture_output=True,
+    )
+
+    assert proc.returncode == 0
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert sorted(payload.keys()) == ["env", "input", "issue_count", "row_count", "rows"]
+    assert payload["row_count"] == 1
+    assert any(issue["code"] == "target_not_realized" for issue in payload["rows"][0]["issues"])
+
+
 def test_looks_like_noun_candidate_rejects_sentence_like_phrase() -> None:
     from mdproc.validation_core import looks_like_noun_candidate
 
     assert looks_like_noun_candidate("Setzen Sie sich doch") is False
 
+
+def test_looks_like_noun_candidate_rejects_substantivized_neues() -> None:
+    from mdproc.validation_core import looks_like_noun_candidate
+
+    assert looks_like_noun_candidate("Neues") is False
 
 def test_validate_requirement4_diacritics_allows_zue_prefix_words() -> None:
     import sys
@@ -332,3 +505,4 @@ def test_validate_requirement4_diacritics_allows_tagesaktuell() -> None:
     ).splitlines()
 
     assert validate_german_diacritics(lines) == []
+

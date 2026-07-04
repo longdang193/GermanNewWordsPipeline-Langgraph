@@ -223,6 +223,30 @@ def test_build_override_entry_adds_missing_meaning_lhs_for_phrase():
     assert "meaning: etwas macht … Prozent der Note aus = etwas macht einen bestimmten Prozentsatz der Note aus / something makes up a certain percent of the grade" in entry
 
 
+def test_validate_entry_quality_rejects_noun_tagged_phrase_shape():
+    processor = GermanVocabProcessor(requirement_file="dummy", output_file="dummy")  # type: ignore[arg-type]
+    entry = dedent(
+        """
+        SSTART
+        %VOCAB (German) ver 3
+        word: eine Beteiligung an einem Unternehmen
+        meaning: die Beteiligung = das Halten von Anteilen an einer Firma / stake in a company
+        de_1: Eine Beteiligung an einem Unternehmen kann gewinnbringend sein.
+        en_1: A stake in a company can be profitable.
+        word_inf: die Beteiligung
+        noun_gender: die
+        noun_genetiv: der Beteiligung
+        noun_plural: die Beteiligungen
+        noun_forms: -, -en
+        Tags: noun
+        EEND
+        """
+    ).strip()
+
+    issues = processor.validate_entry_quality(entry)
+
+    assert any("noun block word looks like a phrase" in issue for issue in issues)
+
 def test_try_llm_enrich_override_rejects_invalid_meaning(monkeypatch, tmp_path):
     import sys
     import types
@@ -285,3 +309,4 @@ def test_try_llm_enrich_override_raises_on_auth_failure(monkeypatch, tmp_path):
         assert "NW1 LLM authentication failed" in str(exc)
     else:
         raise AssertionError("Expected NW1 auth failures to surface as actionable runtime errors.")
+

@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from typing import Any, TextIO
 
 from notebooklm_errors import classify_notebooklm_error
+from mdproc.validation_core import iter_blocks
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -191,6 +192,13 @@ def count_word_list_entries(path: Path) -> int:
             count += 1
     return count
 
+
+def has_parseable_nw1_blocks(path: Path) -> bool:
+    if not path.exists():
+        return False
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return any(True for _ in iter_blocks(lines))
+
 def run_pipeline() -> int:
     logs_dir = ROOT / "Outputs" / "logs"
     reports_dir = ROOT / "Outputs" / "reports"
@@ -216,30 +224,37 @@ def run_pipeline() -> int:
             legacy_word_file.unlink()
 
         # NW1
-        run_cmd(
+        nw1 = run_cmd(
             [sys.executable, str(SCRIPTS / "process_requirement1.py")],
             "NW1: Generate Outputs/01_words.md",
             log_fp=log_fp,
         )
+        if nw1.returncode != 0:
+            if not has_parseable_nw1_blocks(ROOT / "Outputs" / "01_words.md"):
+                print("\n[STOP] NW1 generation failed. Fix NW1 generation quality first.")
+                return 1
+            print("\n[WARN] NW1 exited non-zero, but usable blocks exist. Continuing.")
+
         v1 = run_cmd(
             [sys.executable, str(SCRIPTS / "validate_word_list.py")],
             "NW1: Validate Outputs/01_words.md",
             log_fp=log_fp,
         )
         if v1.returncode != 0:
-            print("\n[STOP] NW1 validation failed. Fix NW1 generation quality first.")
-            return 1
+            if not has_parseable_nw1_blocks(ROOT / "Outputs" / "01_words.md"):
+                print("\n[STOP] NW1 validation failed. Fix NW1 generation quality first.")
+                return 1
+            print("\n[WARN] NW1 validation failed, but usable blocks exist. Continuing.")
 
         if (ROOT / "Outputs" / "01_words.md").exists() and (ROOT / "Tools" / "scripts" / "nw1_qa_review.py").exists():
-            if (os.environ.get("GNW_ENABLE_NW1_QA", "0") == "1"):
-                cmd = [sys.executable, str(SCRIPTS / "nw1_qa_review.py"), "--root", "."]
-                if os.environ.get("GNW_ENABLE_NW1_LLM_QA", "0") == "1":
-                    cmd.append("--llm")
-                run_cmd(
-                    cmd,
-                    "NW1: QA review (optional)",
-                    log_fp=log_fp,
-                )
+            cmd = [sys.executable, str(SCRIPTS / "nw1_qa_review.py"), "--root", "."]
+            if os.environ.get("GNW_ENABLE_NW1_LLM_QA", "0") == "1":
+                cmd.append("--llm")
+            run_cmd(
+                cmd,
+                "NW1: QA review",
+                log_fp=log_fp,
+            )
 
         # NW2
         n2a = run_cmd(

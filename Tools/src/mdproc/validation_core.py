@@ -249,9 +249,11 @@ def validate_word_field_rules(lines: list[str]) -> list[str]:
             )
 
         if "noun" in tags and WORD_LEADING_ARTICLE_RE.match(word):
-            issues.append(
-                f"Line {word_line}: noun word field must not start with der/die/das -> '{word}'"
-            )
+            word_inf = values.get("word_inf", "").strip()
+            if word.casefold().strip() != word_inf.casefold().strip():
+                issues.append(
+                    f"Line {word_line}: noun word field must not start with der/die/das -> '{word}'"
+                )
 
     return issues
 
@@ -459,7 +461,7 @@ def looks_like_noun_candidate(term: str) -> bool:
     if not token:
         return False
 
-    if token.lower() == "weihnachten":
+    if token.lower() in {"weihnachten", "neues"}:
         return False
 
     if token.upper() == token and len(token) > 1:
@@ -512,3 +514,4 @@ def looks_like_noun_candidate(term: str) -> bool:
             return False
 
     return parts[0][0].isupper()
+

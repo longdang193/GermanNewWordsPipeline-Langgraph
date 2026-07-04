@@ -11,7 +11,6 @@ class PipelineState(TypedDict, total=False):
     root: str
     clear_proxy: bool
     last_step: str
-    enable_nw1_qa: bool
 
 
 @dataclass(frozen=True)
@@ -41,16 +40,20 @@ def _run_step(state: PipelineState, step: CommandStep) -> PipelineState:
 def build_graph() -> Any:
     # Lazy import so Tools can be installed without langgraph extra.
     from langgraph.graph import StateGraph, END  # type: ignore[import-not-found]
+    import os
 
     graph = StateGraph(PipelineState)
 
     root = Path(__file__).resolve().parents[3]
     scripts = root / "Tools" / "scripts"
+    qa_cmd = [sys.executable, str(scripts / "nw1_qa_review.py"), "--root", "."]
+    if os.environ.get("GNW_ENABLE_NW1_LLM_QA", "0") == "1":
+        qa_cmd.append("--llm")
 
     steps: list[CommandStep] = [
         CommandStep("nw1_generate", [sys.executable, str(scripts / "process_requirement1.py")]),
         CommandStep("nw1_validate", [sys.executable, str(scripts / "validate_word_list.py")]),
-        CommandStep("nw1_qa_review", [sys.executable, str(scripts / "nw1_qa_review.py"), "--root", "."]),
+        CommandStep("nw1_qa_review", qa_cmd),
         CommandStep("nw2_process", ["py", "-m", "mdproc", "process", "Outputs/01_words.md", "--output", "Outputs/02_words_fixed.md"]),
         CommandStep("nw2_words", ["py", "-m", "mdproc", "words", "Outputs/02_words_fixed.md", "--output", "Outputs/03_word_list.md"]),
         CommandStep("nw3_query", [sys.executable, str(scripts / "query_see_also_notebooklm.py"), "--root", ".", "--mcp-url", "http://127.0.0.1:8010/mcp"]),
@@ -65,9 +68,6 @@ def build_graph() -> Any:
 
         def make_fn(s: CommandStep):
             def fn(st: PipelineState):
-                if s.name == "nw1_qa_review" and not st.get("enable_nw1_qa", False):
-                    st["last_step"] = "nw1_qa_review(skipped)"
-                    return st
                 return _run_step(st, s)
 
             return fn
@@ -87,6 +87,5 @@ def run(*, root: Path, clear_proxy: bool) -> None:
     init: PipelineState = {
         "root": str(root),
         "clear_proxy": clear_proxy,
-        "enable_nw1_qa": bool(int(__import__("os").environ.get("GNW_ENABLE_NW1_QA", "0"))),
     }
     app.invoke(init)

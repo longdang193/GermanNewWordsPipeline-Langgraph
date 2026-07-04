@@ -52,6 +52,23 @@ LLM structured-output compatibility is also configured in `configs/runtime.toml`
 - `[llm].prompted_structured_output_model_prefixes`
 - Use this when an OpenAI-compatible backend supports JSON prompting but not tool-forced structured output for some model families.
 
+NW1 LLM config ownership:
+- `configs/runtime.toml` = runtime policy/defaults/flags
+  - `[nw1].enable_llm_enrich`
+  - `[llm].default_model`
+  - `[llm].allow_default_openai_base_url`
+  - `[llm].prompted_structured_output_model_prefixes`
+- `.env` = machine-local values only
+  - `OPENAI_API_KEY`
+  - `OPENAI_BASE_URL`
+  - `OPENAI_MODEL` (optional override; falls back to runtime default when missing)
+
+Resolution order:
+1. load `configs/runtime.toml`
+2. load `.env` for missing environment variables
+3. read stable `OPENAI_*` names
+4. if `OPENAI_MODEL` missing, use `[llm].default_model`
+
 If auth expired:
 - Run `notebooklm-mcp-auth`
 

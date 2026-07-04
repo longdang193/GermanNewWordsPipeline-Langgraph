@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from pathlib import Path
 
 from gnw_pipeline.env import load_dotenv_if_present
-from gnw_pipeline.llm_runtime import build_openai_compatible_model, resolve_structured_output
+from gnw_pipeline.llm_runtime import build_openai_compatible_model, get_llm_runtime_settings, resolve_structured_output
 from gnw_pipeline.prompts import load_prompt
 
 
@@ -56,7 +56,7 @@ async def llm_enrich_term_async(*, term: str, meaning_hint: str | None = None) -
     root = Path(os.getcwd()).resolve()
     load_dotenv_if_present(root)
 
-    model_name = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    model_name = get_llm_runtime_settings(root=root, require_api_key=True).model_name
     agent = _get_model_and_agent(model_name)
 
     prompt = _enrich_instructions(root).strip() + "\n\n" + f"TERM: {term.strip()}\n"

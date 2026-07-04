@@ -255,11 +255,14 @@ def validate_noun_block_shape(lines: list[str]) -> list[str]:
             )
             continue
 
-        if len(tokens) > 1 and any(token and token[0].islower() for token in tokens[1:]):
-            issues.append(
-                f"Line {word_line}: noun block word looks like a phrase, not a noun lemma -> '{word_value}'"
-            )
-            continue
+        has_lowercase_later_token = len(tokens) > 1 and any(token and token[0].islower() for token in tokens[1:])
+        if has_lowercase_later_token:
+            starts_with_article = bool(tokens) and tokens[0].casefold() in {"der", "die", "das"}
+            if not (starts_with_article and word_value.casefold().strip() == word_inf_value.casefold().strip()):
+                issues.append(
+                    f"Line {word_line}: noun block word looks like a phrase, not a noun lemma -> '{word_value}'"
+                )
+                continue
 
         if (
             len(tokens) == 1
@@ -267,7 +270,7 @@ def validate_noun_block_shape(lines: list[str]) -> list[str]:
             and tokens[0][0].isupper()
             and word_inf_value.startswith("der ")
             and word_inf_value.removeprefix("der ").strip() == word_value
-            and word_value.endswith(("e", "en"))
+            and word_value.endswith("e")
         ):
             issues.append(
                 f"Line {word_line}: noun block likely guessed a bad masculine lemma -> '{word_value}' / '{word_inf_value}'"
@@ -405,51 +408,26 @@ def main() -> int:
     if unresolved_words:
         print(f"   Unresolved (explicit): {len(unresolved_words)} entries")
 
-    expected_covered = unique_count - len(unresolved_words)
+    expected_covered = unique_count
 
-    allow_all_unresolved_empty_output = (
-        unique_count > 0
-        and expected_covered == 0
-        and block_count == 0
-        and block_issues
-        and all("No SSTART...EEND blocks found" in issue for issue in block_issues)
-        and not placeholder_issues
-        and not word_hygiene_issues
-        and not meaning_field_issues
-        and not generic_content_issues
-        and not required_field_issues
-        and not tag_order_issues
-        and not blank_line_issues
-        and not duplicate_field_issues
-        and not noun_shape_issues
-        and not drift_detected
-    )
-
-    if block_count == expected_covered and not block_issues and not placeholder_issues and not word_hygiene_issues and not meaning_field_issues and not generic_content_issues and not required_field_issues and not tag_order_issues and not blank_line_issues and not duplicate_field_issues and not noun_shape_issues and not drift_detected:
-        print(
-            f"\n[OK] VALIDATION PASSED: {block_count} entries generated; {len(unresolved_words)} unresolved explicitly recorded."
-        )
+    if block_count == expected_covered and not unresolved_words and not block_issues and not placeholder_issues and not word_hygiene_issues and not meaning_field_issues and not generic_content_issues and not required_field_issues and not tag_order_issues and not blank_line_issues and not duplicate_field_issues and not noun_shape_issues and not drift_detected:
+        print("\n[OK] VALIDATION PASSED: all required entries generated with no unresolved items.")
         print("   The generated vocabulary file is complete and path-consistent.\n")
-        return 0
-
-    if allow_all_unresolved_empty_output:
-        print(
-            f"\n[OK] VALIDATION PASSED: 0 entries generated; {len(unresolved_words)} unresolved explicitly recorded."
-        )
-        print("   All Word List items explicitly unresolved; empty output is permitted.\n")
         return 0
 
     if block_count > unique_count:
         print(
             f"\n[WARN] More blocks ({block_count}) than expected ({unique_count}).")
         print("   This may indicate duplicate entries or additional words.")
-    elif block_count < unique_count:
-        missing = unique_count - block_count
+    elif block_count < expected_covered:
+        missing = expected_covered - block_count
         print(f"\n[ERROR] VALIDATION FAILED: Missing {missing} entries.")
-        print(f"   Expected: {unique_count} blocks (or {expected_covered} if unresolved accounted)")
+        print(f"   Expected: {expected_covered} blocks")
         print(f"   Found: {block_count} blocks")
-        if unresolved_words and block_count != expected_covered:
-            print("   Unresolved list present, but counts still do not match expected coverage.")
+
+    if unresolved_words:
+        print("\n[ERROR] UNRESOLVED ITEMS PRESENT: strict NW1 validation requires zero unresolved items.")
+        print(f"   Unresolved count: {len(unresolved_words)}")
 
     if drift_detected:
         print(
@@ -493,3 +471,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
