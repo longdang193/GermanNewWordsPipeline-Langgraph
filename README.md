@@ -32,8 +32,10 @@ Reports/logs (low-noise):
   - `Auth NotebookLM` (if needed)
 
 Prereq:
-- `notebooklm-mcp` and `notebooklm-mcp-auth` in `PATH`
+- Supported NotebookLM CLI: `uv tool install --force notebooklm-mcp-cli`
+- `nlm` and `notebooklm-mcp` must resolve from the same `PATH` directory
 - Python launcher `py` in `PATH` (exe uses it to run scripts)
+- Verify: `dist/GermanNewWords/GermanNewWords.exe --root . doctor`
 
 ### Option B: Python runner
 
@@ -46,7 +48,11 @@ NW3 uses NotebookLM MCP to generate `see_also`:
 - Tool: `Tools/scripts/generate_requirement3_notebooklm.py` (stdio MCP)
 - Prompt SSOT: `Prompt/nw3_notebooklm_query.md` (template with `{word_list}`)
 - Runtime knobs: `configs/runtime.toml`
-- If NW3 prints auth/session invalid or `Authentication expired`, rerun `dist/GermanNewWords/GermanNewWords.exe --root . auth --clear-proxy`, then rerun pipeline.
+- Auto auth uses the dedicated `~/.notebooklm-mcp/chrome-profile`; login in normal Chrome does not prove this profile is authenticated.
+- If NW3 prints auth/session invalid or `Authentication expired`, run `dist/GermanNewWords/GermanNewWords.exe --root . auth`, then rerun pipeline.
+- If auto auth cannot detect login, run `gnw auth --file` and enter the cookie-file path, or run `nlm login --manual --file <path>` directly.
+- If doctor reports mixed providers, inspect `where.exe nlm` and `where.exe notebooklm-mcp`.
+- Remove legacy UV install with `uv tool uninstall notebooklm-mcp-server`, then reinstall supported CLI.
 
 LLM structured-output compatibility is also configured in `configs/runtime.toml`:
 - `[llm].prompted_structured_output_model_prefixes`
@@ -68,9 +74,6 @@ Resolution order:
 2. load `.env` for missing environment variables
 3. read stable `OPENAI_*` names
 4. if `OPENAI_MODEL` missing, use `[llm].default_model`
-
-If auth expired:
-- Run `notebooklm-mcp-auth`
 
 ## Prompt SSOT
 

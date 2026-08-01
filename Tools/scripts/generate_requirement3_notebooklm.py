@@ -7,7 +7,7 @@ Design goals:
 - Robust: retries on timeouts / malformed blocks by restarting MCP process.
 
 This uses the local NotebookLM MCP stdio server binary: notebooklm-mcp.
-Auth must already be cached (run `notebooklm-mcp-auth` once if needed).
+Auth must already be cached (run `nlm login` once if needed).
 """
 
 from __future__ import annotations
@@ -29,6 +29,9 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SRC_DIR = SCRIPT_DIR.parent / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
+
+from gnw_pipeline.notebooklm_runtime import notebooklm_install_problems  # noqa: E402
+
 WORDLIST_PATH = ROOT / "Outputs" / "03_word_list.md"
 OUT_PATH = ROOT / "Outputs" / "04_see_also.md"
 
@@ -256,6 +259,12 @@ def main() -> int:
     if not WORDLIST_PATH.exists():
         raise SystemExit(f"Missing word list: {WORDLIST_PATH}")
 
+    install_problems = notebooklm_install_problems()
+    if install_problems:
+        for problem in install_problems:
+            print(f"[error] {problem}")
+        return 2
+
     words = read_words()
     existing = load_existing_blocks()
 
@@ -335,7 +344,7 @@ def main() -> int:
                         if error_kind == "auth":
                             print(
                                 "[error] NotebookLM auth/session is invalid. "
-                                "Run notebooklm-mcp-auth and rerun NW3."
+                "Run nlm login and rerun NW3."
                             )
                         else:
                             print(

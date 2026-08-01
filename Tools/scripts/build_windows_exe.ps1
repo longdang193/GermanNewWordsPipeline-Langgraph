@@ -25,6 +25,7 @@ Write-Host "[STEP] Build Windows exe (console) via PyInstaller"
 Write-Host "[INFO] Output dir: $OutDir"
 
 $toolsDir = Join-Path $RepoRoot "Tools"
+$specDir = Join-Path $RepoRoot "Tools\build\spec"
 Set-Location $toolsDir
 
 if (-not (Test-Path -LiteralPath $VenvDir)) {
@@ -58,12 +59,14 @@ foreach ($m in $exclude) { $excludeArgs += @("--exclude-module", $m) }
 
 Write-Host "[STEP] PyInstaller build (isolated site-packages)"
 $env:PYTHONNOUSERSITE = "1"
+New-Item -ItemType Directory -Force -Path $specDir | Out-Null
 
 & $py -m PyInstaller `
   --name GermanNewWords `
   --onefile `
   --console `
   --distpath $OutDir `
+  --specpath $specDir `
   --clean `
   $excludeArgs `
   (Join-Path $toolsDir "src\\gnw\\__main__.py")

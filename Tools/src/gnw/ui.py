@@ -8,6 +8,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from gnw_pipeline.notebooklm_runtime import run_notebooklm_auth
+
 
 @dataclass(frozen=True)
 class UiState:
@@ -66,16 +68,6 @@ def open_outputs_folder(root: Path) -> None:
         subprocess.run(["explorer.exe", str(outputs)], check=False)
     except Exception:
         print(f"[FAIL] Cannot open folder: {outputs}")
-
-
-def run_notebooklm_auth(root: Path) -> int:
-    env = os.environ.copy()
-    for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
-        if env.get(k):
-            env[k] = ""
-    print("[STEP] NotebookLM MCP auth (interactive if needed)")
-    proc = subprocess.run(["notebooklm-mcp-auth"], cwd=str(root), env=env)
-    return proc.returncode
 
 
 def _python_launcher() -> str | None:
@@ -170,7 +162,7 @@ def run_ui(root: Path) -> int:
             continue
 
         if choice == "3":
-            rc = run_notebooklm_auth(root)
+            rc = run_notebooklm_auth(cwd=root)
             if rc != 0:
                 print(f"[FAIL] Auth failed (exit={rc})")
                 _pause()

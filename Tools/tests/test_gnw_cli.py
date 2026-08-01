@@ -9,7 +9,48 @@ SRC_DIR = ROOT / "Tools" / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-import gnw.__main__ as gnw_main
+import gnw.__main__ as gnw_main  # noqa: E402
+
+
+def test_cmd_auth_uses_shared_notebooklm_runner(monkeypatch, tmp_path: Path) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_auth(*, cwd: Path, file_mode: bool = False) -> int:
+        seen["cwd"] = cwd
+        seen["file_mode"] = file_mode
+        return 7
+
+    monkeypatch.setattr(gnw_main, "run_notebooklm_auth", fake_auth, raising=False)
+    monkeypatch.setattr(
+        gnw_main.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("legacy auth launched")),
+    )
+    args = type("Args", (), {"root": tmp_path, "file_mode": True, "clear_proxy": False})()
+
+    assert gnw_main.cmd_auth(args) == 7
+    assert seen == {"cwd": tmp_path, "file_mode": True}
+
+
+def test_cmd_doctor_reports_notebooklm_install_problems(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(gnw_main.shutil, "which", lambda name: "C:/Windows/py.exe" if name == "py" else None)
+    monkeypatch.setattr(
+        gnw_main,
+        "notebooklm_install_problems",
+        lambda: ["requires nlm >= 0.9.4"],
+        raising=False,
+    )
+
+    assert gnw_main.cmd_doctor(type("Args", (), {})()) == 2
+    assert "[FAIL] requires nlm >= 0.9.4" in capsys.readouterr().out
+
+
+def test_cmd_doctor_accepts_coherent_notebooklm_install(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(gnw_main.shutil, "which", lambda name: "C:/Windows/py.exe" if name == "py" else None)
+    monkeypatch.setattr(gnw_main, "notebooklm_install_problems", lambda: [], raising=False)
+
+    assert gnw_main.cmd_doctor(type("Args", (), {})()) == 0
+    assert "[OK] Basic executables present in PATH" in capsys.readouterr().out
 
 
 def test_cmd_run_flushes_step_banner_in_script_runner(monkeypatch, tmp_path: Path) -> None:

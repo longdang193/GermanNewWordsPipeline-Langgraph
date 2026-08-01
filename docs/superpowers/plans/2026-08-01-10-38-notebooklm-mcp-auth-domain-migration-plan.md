@@ -1,7 +1,7 @@
 ---
 layer: change
 artifact_type: plan
-status: proposed
+status: completed
 template_id: implementation-plan
 name: notebooklm-mcp-auth-domain-migration
 parent_thread: current-thread
@@ -11,9 +11,11 @@ targets:
   - Tools/src/gnw/ui.py
   - Tools/scripts/run_full_pipeline.py
   - Tools/scripts/generate_requirement3_notebooklm.py
+  - Tools/scripts/build_windows_exe.ps1
   - Tools/tests/test_notebooklm_runtime.py
   - Tools/tests/test_gnw_cli.py
   - README.md
+  - dist/GermanNewWords/GermanNewWords.exe
 related_features:
   - notebooklm-auth
   - nw3-generation
@@ -37,6 +39,7 @@ Prevent NW3 from entering the broken five-minute NotebookLM re-authentication wa
   - Shared NotebookLM authentication subprocess invocation.
   - `gnw doctor`, CLI auth, menu auth, direct NW3, and full-pipeline behavior.
   - Focused regression tests and root operator documentation.
+  - Rebuilt tracked Windows executable from updated canonical Python source.
 - Preserved behavior:
   - NW3 continues using stdio MCP.
   - MCP tool names remain `refresh_auth`, `notebook_list`, and `notebook_query`.
@@ -61,14 +64,14 @@ Prevent NW3 from entering the broken five-minute NotebookLM re-authentication wa
 # Resolution Contract
 
 1. `Tools/src/gnw_pipeline/notebooklm_runtime.py` owns NotebookLM executable compatibility, resolved command paths, and auth subprocess behavior.
-2. Supported command set is `nlm`, `notebooklm-mcp`, and `notebooklm-mcp-auth` from one resolved executable directory.
+2. Supported command set is `nlm` and `notebooklm-mcp` from one resolved executable directory.
 3. Minimum accepted `nlm` version is `0.9.4`.
 4. Version parsing accepts observed output `nlm version X.Y.Z` and rejects missing, malformed, or older versions.
 5. Validation failures, version-command timeouts, and process launch errors return actionable messages and exit code `2`; they must not start Chrome or MCP server.
 6. Auth subprocesses clear `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and lowercase equivalents in copied environment only.
 7. `--file` is forwarded only when requested by `gnw auth --file`.
 8. Direct NW3 validates installation before spawning `notebooklm-mcp`.
-9. `gnw doctor` reports every missing, incompatible, or mixed-provider command and succeeds only when full NotebookLM command set is coherent.
+9. `gnw doctor` reports every missing, incompatible, or mixed-provider command and succeeds only when both NotebookLM commands are coherent.
 10. Repository code never patches old-domain behavior inside third-party package internals.
 
 # Key Deliverables
@@ -77,6 +80,7 @@ Prevent NW3 from entering the broken five-minute NotebookLM re-authentication wa
 2. One focused test file proving supported, missing, old, malformed, mixed-provider, proxy-clearing, and file-mode cases.
 3. Thin CLI, UI, pipeline, and direct-NW3 consumers with no duplicate NotebookLM auth environment logic.
 4. Updated installation and recovery instructions naming `notebooklm-mcp-cli` and `--file` fallback.
+5. Updated tracked `GermanNewWords.exe` containing the shared doctor/auth behavior.
 
 # Execution Approach
 
@@ -98,7 +102,7 @@ Prevent NW3 from entering the broken five-minute NotebookLM re-authentication wa
 **Work**
 - Define `NOTEBOOKLM_MCP_MIN_VERSION = (0, 9, 4)` as sole minimum-version owner.
 - Add private `_inspect_notebooklm_install() -> tuple[dict[str, Path], list[str]]`:
-  - resolve `nlm`, `notebooklm-mcp`, and `notebooklm-mcp-auth` with `shutil.which`;
+- resolve `nlm` and `notebooklm-mcp` with `shutil.which`;
   - report each missing command;
   - run resolved `nlm --version` with captured text and bounded timeout;
   - convert `subprocess.TimeoutExpired` and `OSError` into compatibility problems;
@@ -111,7 +115,7 @@ Prevent NW3 from entering the broken five-minute NotebookLM re-authentication wa
   - call `_inspect_notebooklm_install()` once and reuse returned auth executable path;
   - print each problem with `[FAIL]` and return `2` when incompatible;
   - copy environment and blank proxy variables only in that copy;
-  - execute resolved `notebooklm-mcp-auth`, appending `--file` only for file mode;
+- execute resolved `nlm login`, appending `--manual` only for file mode;
   - convert auth launch `OSError` into `[FAIL]` output and exit code `2`;
   - return subprocess exit code unchanged.
 - Keep helper synchronous; no classes, package managers, config files, or new dependency.
@@ -172,8 +176,8 @@ Prevent NW3 from entering the broken five-minute NotebookLM re-authentication wa
 - Replace generic prerequisite wording with supported distribution `notebooklm-mcp-cli`.
 - Document `uv tool uninstall notebooklm-mcp-server`, `uv tool install --force notebooklm-mcp-cli`, and `gnw doctor`.
 - Explain auto auth uses dedicated Chrome profile; normal Chrome login does not prove MCP-profile validity.
-- Document `notebooklm-mcp-auth --file` as manual fallback, not default recovery.
-- Direct users to `where.exe nlm`, `where.exe notebooklm-mcp`, and `where.exe notebooklm-mcp-auth` when doctor reports mixed providers.
+- Document `gnw auth --file` and `nlm login --manual --file <path>` as manual fallbacks, not default recovery.
+- Direct users to `where.exe nlm` and `where.exe notebooklm-mcp` when doctor reports mixed providers.
 - Do not duplicate minimum version in README; `notebooklm_runtime.py` remains SSOT and doctor reports requirement.
 
 **Verification**
@@ -181,7 +185,23 @@ Prevent NW3 from entering the broken five-minute NotebookLM re-authentication wa
 - Source grep shows `notebooklm-mcp-server` only in migration/removal guidance and tests.
 - Source grep shows one owner of `NOTEBOOKLM_MCP_MIN_VERSION`.
 
-# Task 5 — Final verification and live smoke
+# Task 5 — Rebuild tracked Windows executable
+
+**Files**
+- `Tools/scripts/build_windows_exe.ps1`
+- `dist/GermanNewWords/GermanNewWords.exe`
+
+**Work**
+- Add ignored `Tools/build/spec` as PyInstaller `--specpath` so lane-specific absolute paths do not overwrite tracked `Tools/GermanNewWords.spec`.
+- Rebuild tracked executable from lane source with existing build script.
+- Verify source-tree doctor and rebuilt-exe doctor report the same incompatible-install result before machine-global migration.
+
+**Verification**
+- `powershell -ExecutionPolicy Bypass -File Tools/scripts/build_windows_exe.ps1 -RepoRoot . -OutDir dist/GermanNewWords -VenvDir Tools/.exe_venv`
+- `git diff --exit-code -- Tools/GermanNewWords.spec`
+- `dist/GermanNewWords/GermanNewWords.exe --root . doctor`
+
+# Task 6 — Final verification and live smoke
 
 **Files**
 - No new code target; verification only.
@@ -203,7 +223,7 @@ Prevent NW3 from entering the broken five-minute NotebookLM re-authentication wa
 - `uv tool install --force notebooklm-mcp-cli`
 - `gnw --root . doctor`
 - `dist/GermanNewWords/GermanNewWords.exe --root . doctor`
-- `notebooklm-mcp-auth`
+- `nlm login`
 - `nlm notebook list --json`
 - `git status --short`
 - `gitnexus_detect_changes(scope="all")`
@@ -214,7 +234,8 @@ Prevent NW3 from entering the broken five-minute NotebookLM re-authentication wa
 2. Task 2 after Task 1: entry points migrate to established helper contract.
 3. Task 3 after Task 1: direct NW3 gains same compatibility result without duplication.
 4. Task 4 after Tasks 1–3: documentation describes final command and error behavior.
-5. Task 5 last: environment migration and live authentication occur only after code guards and tests exist.
+5. Task 5 after Tasks 1–4: tracked executable must derive from final source and docs contract.
+6. Task 6 last: environment migration and live authentication occur only after code guards, tests, and executable rebuild exist.
 
 # Rollback / Containment
 
@@ -222,7 +243,7 @@ Prevent NW3 from entering the broken five-minute NotebookLM re-authentication wa
 - Do not modify or delete `~/.notebooklm-mcp/auth.json` or dedicated Chrome profile during code execution.
 - Do not uninstall npm or Python packages automatically; doctor reports conflicts and operator chooses machine cleanup.
 - If `notebooklm-mcp-cli` changes MCP tool names in future, keep minimum-version guard, stop upgrade, and create separate compatibility change.
-- If live authentication fails after coherent installation, use `notebooklm-mcp-auth --file`; do not reintroduce third-party source patching.
+- If live authentication fails after coherent installation, use `gnw auth --file` or `nlm login --manual --file <path>`; do not reintroduce third-party source patching.
 
 # Validation Rules
 

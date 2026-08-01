@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from gnw_pipeline.notebooklm_runtime import notebooklm_install_problems, run_notebooklm_auth
+
 
 def find_repo_root(start: Path) -> Path:
     """Find repo root by walking upward from start.
@@ -58,16 +60,7 @@ def cmd_check_input(args: argparse.Namespace) -> int:
 
 
 def cmd_auth(args: argparse.Namespace) -> int:
-    root = args.root
-    env = os.environ.copy()
-    if args.clear_proxy:
-        for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
-            env[k] = ""
-    cmd = ["notebooklm-mcp-auth"]
-    if args.file_mode:
-        cmd.append("--file")
-    print("[STEP] NotebookLM MCP auth (interactive if needed)")
-    return subprocess.run(cmd, cwd=str(root), env=env).returncode
+    return run_notebooklm_auth(cwd=args.root, file_mode=args.file_mode)
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -100,10 +93,9 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_doctor(_: argparse.Namespace) -> int:
-    problems: list[str] = []
-    for exe in ("notebooklm-mcp", "notebooklm-mcp-auth", "py"):
-        if shutil.which(exe) is None:
-            problems.append(f"missing executable in PATH: {exe}")
+    problems = notebooklm_install_problems()
+    if shutil.which("py") is None:
+        problems.append("missing executable in PATH: py")
     if problems:
         for p in problems:
             print(f"[FAIL] {p}")
@@ -126,7 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
     s_check.set_defaults(fn=cmd_check_input)
 
     s_auth = sub.add_parser("auth", help="Run notebooklm-mcp auth (no cookie file juggling).")
-    s_auth.add_argument("--file", dest="file_mode", action="store_true", help="Use --file mode if needed.")
+    s_auth.add_argument("--file", dest="file_mode", action="store_true", help="Prompt for a cookie file.")
     s_auth.add_argument(
         "--clear-proxy",
         action="store_true",

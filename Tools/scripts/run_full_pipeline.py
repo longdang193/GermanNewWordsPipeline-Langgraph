@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from typing import Any, TextIO
 
 from notebooklm_errors import classify_notebooklm_error
-from mdproc.validation_core import iter_blocks
+from gnw_pipeline.notebooklm_runtime import run_notebooklm_auth
 from gnw_pipeline.nw1_steps import build_nw1_steps, has_parseable_nw1_blocks
 
 
@@ -174,15 +174,6 @@ def is_transient_notebook_error(text: str) -> bool:
         )
     )
 
-
-def run_notebooklm_auth(*, cwd: Path) -> int:
-    env = os.environ.copy()
-    for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
-        if env.get(k):
-            env[k] = ""
-    print("[STEP] NotebookLM MCP auth (interactive if needed)")
-    proc = subprocess.run(["notebooklm-mcp-auth"], cwd=str(cwd), env=env)
-    return proc.returncode
 
 def count_word_list_entries(path: Path) -> int:
     if not path.exists():
