@@ -95,6 +95,7 @@ def run_notebooklm_auth(*, cwd: Path, file_mode: bool = False) -> int:
         return 2
 
     env = os.environ.copy()
+    env["NO_COLOR"] = "1"
     for name in _PROXY_NAMES:
         env[name] = ""
 
@@ -104,7 +105,13 @@ def run_notebooklm_auth(*, cwd: Path, file_mode: bool = False) -> int:
 
     print("[STEP] NotebookLM MCP auth (interactive if needed)")
     try:
-        return subprocess.run(command, cwd=str(cwd), env=env, check=False).returncode
+        return subprocess.run(
+            command,
+            cwd=str(cwd),
+            env=env,
+            stderr=subprocess.STDOUT,
+            check=False,
+        ).returncode
     except OSError as error:
         print(f"[FAIL] Could not start NotebookLM login: {error}")
         return 2

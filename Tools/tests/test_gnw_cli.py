@@ -83,3 +83,37 @@ def test_cmd_run_flushes_step_banner_in_script_runner(monkeypatch, tmp_path: Pat
 
     assert gnw_main.cmd_run(args) == 0
     assert printed == [(("[STEP] Run full pipeline NW1->NW4 (script runner)",), {"flush": True})]
+
+
+def test_cmd_run_forwards_resume_without_importing_langgraph(monkeypatch, tmp_path: Path) -> None:
+    root = tmp_path
+    script = root / "Tools" / "scripts" / "run_full_pipeline.py"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text("print('ok')\n", encoding="utf-8")
+    calls: list[list[str]] = []
+    real_import = builtins.__import__
+
+    def fail_langgraph_import(name: str, globals=None, locals=None, fromlist=(), level: int = 0):
+        if name == "gnw_pipeline.langgraph_app":
+            raise AssertionError("public CLI must not import LangGraph runner")
+        return real_import(name, globals, locals, fromlist, level)
+
+    class Result:
+        returncode = 0
+
+    monkeypatch.setattr(builtins, "__import__", fail_langgraph_import)
+    monkeypatch.setattr(
+        gnw_main.subprocess,
+        "run",
+        lambda cmd, **_kwargs: calls.append(cmd) or Result(),
+    )
+    args = type("Args", (), {"root": root, "clear_proxy": False, "resume": True})()
+
+    assert gnw_main.cmd_run(args) == 0
+    assert calls == [[sys.executable, str(script), "--resume"]]
+
+
+def test_run_parser_accepts_resume_flag(tmp_path: Path) -> None:
+    args = gnw_main.build_parser().parse_args(["--root", str(tmp_path), "run", "--resume"])
+
+    assert args.resume is True

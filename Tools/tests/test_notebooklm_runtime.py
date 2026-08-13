@@ -134,6 +134,7 @@ def test_auth_clears_child_proxies_and_forwards_file_mode(monkeypatch, tmp_path:
     def fake_run(cmd, **kwargs):
         seen["cmd"] = cmd
         seen["env"] = kwargs["env"]
+        seen["stderr"] = kwargs["stderr"]
         return subprocess.CompletedProcess(args=cmd, returncode=7)
 
     monkeypatch.setattr(notebooklm_runtime.subprocess, "run", fake_run)
@@ -143,6 +144,8 @@ def test_auth_clears_child_proxies_and_forwards_file_mode(monkeypatch, tmp_path:
     child_env = seen["env"]
     assert isinstance(child_env, dict)
     assert child_env["HTTP_PROXY"] == ""
+    assert child_env["NO_COLOR"] == "1"
+    assert seen["stderr"] is subprocess.STDOUT
     assert os.environ["HTTP_PROXY"] == "http://proxy.invalid"
 
 

@@ -69,27 +69,24 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.clear_proxy:
         for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
             env[k] = ""
-    try:
-        from gnw_pipeline.langgraph_app import run as run_graph  # type: ignore[import-not-found]
-
-        print("[STEP] Run full pipeline NW1->NW4 (LangGraph)", flush=True)
-        run_graph(root=root, clear_proxy=args.clear_proxy)
-        return 0
-    except ModuleNotFoundError:
-        script = root / "Tools" / "scripts" / "run_full_pipeline.py"
-        if not script.exists():
-            print(f"[FAIL] Missing pipeline runner: {script}")
+    script = root / "Tools" / "scripts" / "run_full_pipeline.py"
+    if not script.exists():
+        print(f"[FAIL] Missing pipeline runner: {script}")
+        return 2
+    print("[STEP] Run full pipeline NW1->NW4 (script runner)", flush=True)
+    # In a frozen exe, sys.executable points back to the exe (would recurse).
+    if getattr(sys, "frozen", False):
+        py_launcher = shutil.which("py") or shutil.which("python") or shutil.which("python3")
+        if not py_launcher:
+            print("[FAIL] No Python launcher found (py/python).")
+            print("       Install Python 3.11+ or run pipeline from repo using Python.")
             return 2
-        print("[STEP] Run full pipeline NW1->NW4 (script runner)", flush=True)
-        # In a frozen exe, sys.executable points back to the exe (would recurse).
-        if getattr(sys, "frozen", False):
-            py_launcher = shutil.which("py") or shutil.which("python") or shutil.which("python3")
-            if not py_launcher:
-                print("[FAIL] No Python launcher found (py/python).")
-                print("       Install Python 3.11+ or run pipeline from repo using Python.")
-                return 2
-            return subprocess.run([py_launcher, str(script)], cwd=str(root), env=env).returncode
-        return subprocess.run([sys.executable, str(script)], cwd=str(root), env=env).returncode
+        cmd = [py_launcher, str(script)]
+    else:
+        cmd = [sys.executable, str(script)]
+    if getattr(args, "resume", False):
+        cmd.append("--resume")
+    return subprocess.run(cmd, cwd=str(root), env=env).returncode
 
 
 def cmd_doctor(_: argparse.Namespace) -> int:
@@ -132,6 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Clear HTTP(S)_PROXY/ALL_PROXY env for this command only.",
     )
+    s_run.add_argument("--resume", action="store_true", help="Resume reusable pipeline stages.")
     s_run.set_defaults(fn=cmd_run)
 
     s_doc = sub.add_parser("doctor", help="Check required executables in PATH.")

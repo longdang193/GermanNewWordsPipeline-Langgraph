@@ -17,18 +17,6 @@ BLOCK_END = "EEND"
 LEGACY_BLOCK_START = "START"
 LEGACY_BLOCK_END = "END"
 
-GERMAN_FIELDS = {
-    "word",
-    "meaning",
-    "de_1",
-    "word_inf",
-    "noun_genetiv",
-    "noun_plural",
-    "adjective_comp",
-    "adjective_sup",
-    "verb_praet",
-    "verb_perf",
-}
 BACKFILL_FIELDS = ("de_1", "en_1", "word_inf", "noun_gender", "noun_genetiv", "noun_plural")
 NOUN_ONLY_FIELDS = {"noun_gender", "noun_genetiv", "noun_plural", "noun_forms"}
 SOURCE_OVERRIDE_FIELDS = {"meaning", "de_1", "en_1", "word_inf", "noun_gender", "noun_genetiv", "noun_plural", "Tags"}
@@ -207,7 +195,7 @@ def _build_source_field_map(source_path: Path) -> dict[str, dict[str, str]]:
 
 
 def _normalize_umlauts(text: str) -> str:
-    replacements = (
+    _ = (
         ("Ae", "Ä"),
         ("Oe", "Ö"),
         ("Ue", "Ü"),
@@ -215,24 +203,12 @@ def _normalize_umlauts(text: str) -> str:
         ("oe", "ö"),
         ("ue", "ü"),
     )
-    out = text
-    for src, dst in replacements:
-        out = out.replace(src, dst)
-    return out
+    # ponytail: ASCII transliterations are ambiguous; add reviewed dictionary correction only if required.
+    return text
 
 
 def _normalize_german_field(field_name: str, field_value: str) -> str:
-    if field_name not in GERMAN_FIELDS:
-        return field_value
-
-    if field_name == "meaning":
-        # meaning uses "German / English"; normalize only German side.
-        if " / " in field_value:
-            left, right = field_value.split(" / ", 1)
-            return f"{_normalize_umlauts(left)} / {right}"
-        return _normalize_umlauts(field_value)
-
-    return _normalize_umlauts(field_value)
+    return field_value
 
 
 def _strip_article(value: str) -> str:
@@ -341,8 +317,7 @@ def _normalize_requirement4_block(block_lines: list[str], source_fields: dict[st
         source_value = (source_fields or {}).get(field_name, "").strip()
         current_value = existing_fields.get(field_name, "").strip()
         if source_value and not _is_blank_field(field_name, source_value) and _is_blank_field(field_name, current_value):
-            normalized_source_value = _normalize_german_field(field_name, source_value)
-            pending_backfill.append(f"{field_name}: {normalized_source_value}\n")
+            pending_backfill.append(f"{field_name}: {source_value}\n")
 
     result: list[str] = [block_lines[0], "%VOCAB (German) ver 3\n"]
     in_see_also = False
@@ -354,7 +329,7 @@ def _normalize_requirement4_block(block_lines: list[str], source_fields: dict[st
     tags_line: str | None = None
     source_tags = (source_fields or {}).get("Tags", "").strip()
     pending_tags_line = (
-        f"Tags: {_normalize_german_field('Tags', source_tags)}\n"
+        f"Tags: {source_tags}\n"
         if source_tags and not _is_blank_field("Tags", source_tags)
         else None
     )
@@ -409,7 +384,7 @@ def _normalize_requirement4_block(block_lines: list[str], source_fields: dict[st
                 if source_value and not _is_blank_field(field_name, source_value):
                     field_value = source_value
 
-            normalized_value = _normalize_german_field(field_name, field_value)
+            normalized_value = field_value
 
             if field_name == "word_inf":
                 word_inf = normalized_value
@@ -433,15 +408,9 @@ def _normalize_requirement4_block(block_lines: list[str], source_fields: dict[st
         result.extend(pending_backfill)
 
     if is_noun:
-        effective_word_inf = word_inf or _normalize_german_field(
-            "word_inf", (source_fields or {}).get("word_inf", "")
-        )
-        effective_noun_genetiv = noun_genetiv or _normalize_german_field(
-            "noun_genetiv", (source_fields or {}).get("noun_genetiv", "")
-        )
-        effective_noun_plural = noun_plural or _normalize_german_field(
-            "noun_plural", (source_fields or {}).get("noun_plural", "")
-        )
+        effective_word_inf = word_inf or (source_fields or {}).get("word_inf", "")
+        effective_noun_genetiv = noun_genetiv or (source_fields or {}).get("noun_genetiv", "")
+        effective_noun_plural = noun_plural or (source_fields or {}).get("noun_plural", "")
         inferred_noun_forms = _derive_noun_forms(
             effective_word_inf, effective_noun_genetiv, effective_noun_plural)
         result.append(f"noun_forms: {inferred_noun_forms}\n")

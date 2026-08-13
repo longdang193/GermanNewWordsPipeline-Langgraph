@@ -17,6 +17,7 @@ Output (overwritten each run):
 - `Outputs/06_words_final_fixed.md` (final deliverable)
 
 Reports/logs (low-noise):
+- `Outputs/reports/pipeline_state.json` (current resumable state)
 - `Outputs/reports/run_latest.json`
 - `Outputs/reports/runs.jsonl`
 - `Outputs/logs/run_latest.log`
@@ -28,7 +29,8 @@ Reports/logs (low-noise):
 - Run: `dist/GermanNewWords/GermanNewWords.exe`
 - Menu:
   - `Set word list path` → choose input file (copies into `Inputs/Word List (DE).md`)
-  - `Run pipeline`
+  - `Run pipeline (fresh)`
+  - `Resume last run`
   - `Auth NotebookLM` (if needed)
 
 Prereq:
@@ -40,7 +42,13 @@ Prereq:
 ### Option B: Python runner
 
 From repo root:
-- Full pipeline: `py Tools/scripts/run_full_pipeline.py`
+- Fresh pipeline: `py Tools/scripts/run_full_pipeline.py`
+- Resume failed/interrupted pipeline: `py Tools/scripts/run_full_pipeline.py --resume`
+- Installed CLI: `gnw run` or `gnw run --resume`
+
+Fresh actions never resume automatically. `Resume last run` and `--resume` use `Outputs/reports/pipeline_state.json`; unchanged completed stages skip, while changed or incomplete stages rerun with dependents.
+
+If resume rejects a corrupt state file, remove only `Outputs/reports/pipeline_state.json` and start fresh. Do not edit generated `Outputs/*.md` files or manually run downstream stages.
 
 ## NotebookLM
 
@@ -49,7 +57,7 @@ NW3 uses NotebookLM MCP to generate `see_also`:
 - Prompt SSOT: `Prompt/nw3_notebooklm_query.md` (template with `{word_list}`)
 - Runtime knobs: `configs/runtime.toml`
 - Auto auth uses the dedicated `~/.notebooklm-mcp/chrome-profile`; login in normal Chrome does not prove this profile is authenticated.
-- If NW3 prints auth/session invalid or `Authentication expired`, run `dist/GermanNewWords/GermanNewWords.exe --root . auth`, then rerun pipeline.
+- If NW3 prints auth/session invalid or `Authentication expired`, run `dist/GermanNewWords/GermanNewWords.exe --root . auth`, then choose `Resume last run` or run `gnw run --resume`.
 - If auto auth cannot detect login, run `gnw auth --file` and enter the cookie-file path, or run `nlm login --manual --file <path>` directly.
 - If doctor reports mixed providers, inspect `where.exe nlm` and `where.exe notebooklm-mcp`.
 - Remove legacy UV install with `uv tool uninstall notebooklm-mcp-server`, then reinstall supported CLI.

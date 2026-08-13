@@ -78,7 +78,7 @@ def _python_launcher() -> str | None:
     return None
 
 
-def run_pipeline(root: Path) -> int:
+def run_pipeline(root: Path, *, resume: bool = False) -> int:
     script = root / "Tools" / "scripts" / "run_full_pipeline.py"
     if not script.exists():
         print(f"[FAIL] Missing pipeline runner: {script}")
@@ -98,7 +98,9 @@ def run_pipeline(root: Path) -> int:
     else:
         cmd = [sys.executable, str(script)]
 
-    print("[STEP] Run pipeline (NW1->NW4)")
+    if resume:
+        cmd.append("--resume")
+    print("[STEP] Resume pipeline (NW1->NW4)" if resume else "[STEP] Run pipeline (NW1->NW4)")
     proc = subprocess.run(cmd, cwd=str(root), env=env)
     return int(proc.returncode)
 
@@ -138,7 +140,8 @@ def _menu_render(root: Path, state: UiState) -> None:
     if state.last_word_list_path:
         print(f"Last external list: {state.last_word_list_path}")
     print("-" * 60)
-    print("1) Run pipeline")
+    print("1) Run pipeline (fresh)")
+    print("R) Resume last run")
     print("2) Set word list path")
     print("3) Auth NotebookLM")
     print("4) Open Outputs folder")
@@ -173,14 +176,15 @@ def run_ui(root: Path) -> int:
             save_state(root, state)
             continue
 
-        if choice == "1":
+        if choice in {"1", "r", "resume"}:
             inputs_path = root / "Inputs" / "Word List (DE).md"
             if not inputs_path.exists() or not inputs_path.read_text(encoding="utf-8", errors="replace").strip():
                 print("[FAIL] Missing/empty Inputs/Word List (DE).md. Use 'Set word list path' first.")
                 _pause()
                 continue
 
-            rc = run_pipeline(root)
+            resume = choice != "1"
+            rc = run_pipeline(root, resume=resume)
             final_md = root / "Outputs" / "06_words_final_fixed.md"
             log_path = root / "Outputs" / "logs" / "run_latest.log"
             report_path = root / "Outputs" / "reports" / "run_latest.json"
@@ -193,9 +197,11 @@ def run_ui(root: Path) -> int:
             print(f"Log:    {log_path}")
             print(f"Report: {report_path}")
             print("-" * 60)
-            again = input("Enter=menu | Q=exit > ").strip().lower()
+            again = input("Enter=menu | O=open Outputs | Q=exit > ").strip().lower()
             if again in {"q", "quit", "exit"}:
                 return rc
+            if again in {"o", "open", "outputs"}:
+                open_outputs_folder(root)
             continue
 
         print("[WARN] Unknown choice.")

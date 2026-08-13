@@ -1,89 +1,200 @@
-- Wissenschaft
-
-- geizig
-
-- pleite
-
-- Feigling
-
-- Bö
-
-- beschämend
-
-- Angriffe
-
-- eine schöne Kindheit bieten = provide a happy childhood
-- der eine …, der andere … = one person …, the other …
-- eine warme Umgebung = a warm / caring environment
-- hinterherjagen
-- abschieben = to shift someone away / offload
-- etwas kommt + jemandem + zugute = something benefits someone
-- Unterhalt
-- Aber ist es nicht eher so, dass …? = but isn’t it rather the case that …?
-- Kindertagesstätte
-- entgegensetzen
-- begeistert erzählen von … = to excitedly talk about …
-- in der Kinderkrippe sein = attend nursery
-- etwas für etwas anderes aufgeben/austauschen = replace/give up A for B
-- Das mag sein, aber … = that may be true, but …
-- sich etwas erarbeiten = to work hard for / build up something (skills, career, success)
-- die Tatsache, dass … = the fact that …
-- drei Jahre aus dem Beruf aussteigen = to take a 3-year career break
-- weder A noch B + verb
-- Es ist weniger X als Y = not so much X as Y
-- nicht …, sondern … / keine …, sondern …
-- das soziale Verhalten = social behavior
-- ich würde nicht wollen, dass … = I would not want that …
-- Bezugsperson
-- von großer Bedeutung sein = to be of great importance
-- Kinderkrippe = nursery
-- als wir gingen = when we left
-- nach Mitternacht = after midnight
-- nicht mehr anders können als … = have no choice but to
-- ich hätte besser + nicht + past participle = I should have better not …
-- sich neben etwas setzen = sit next to something
-- alles genau mitzukriegen = to catch everything
-- mitzukriegen
-- ein Vollblut + Beruf = a truly passionate professional in that field
-- Vollblut- = “full-blooded” in the sense of very passionate / dedicated / enthusiastic
-- vom Feinsten = absolutely top quality / excellent
-- fein = fine / high-quality / delicate
-- peinlich
-- zum Fernsehen gehen = enter TV industry
-- “Ist ja klar” = something is obvious / goes without saying
-- sehr viel verdienen = earn a lot (of money)
-- falls ich mal … sollte = if I ever … (uncertain future possibility)
-- riesig
-- Ja, und wie. (Yes, absolutely. / Oh yes, very much so. / You can say that again.)
-- an die + Zahl = about / roughly (for numbers)
-- Hab(e) ich hinter mir = I have behind me (I’ve just experienced / gone through)
-- Bitte folgen Sie mir hier entlang.
-- Einheimische
-- rund um den Bahnhof = around the train station
-- Ereignisse, die X zu Y gemacht haben
-- was etwas zu etwas gemacht hat = what made something what it is today
-- nachgehen
-- wofür steht + X? = what does X stand for / represent?
-- Ich kann Ihnen versichern = I can assure you
-- Einige haben … im Blick = some people have … in mind / focus on …
-- abgeben = to hand in / leave (something for storage)
-- zu Unrecht
-- als solches = as such / in that capacity
-- als … verspottet werden = to be mocked as …
-- Oder soll ich lieber X sagen? = Or should I rather say X?
-- das Gedränge = crowding / congestion / hustle
-- umsehen
-- einweihen = introduce
-- schwacher Wind = light wind
-- Sturmböen
-- Die Elbe
-- mitunter = sometimes / occasionally (adds uncertainty)
-- heiter bis wolkig
-- gering bewölkt = slightly cloudy
-- Regenguss
-- Weichenstörung = track switch fault
-- zumindest so = at least like that / at least stated that way
-- aufgrund des starken Berufsverkehrs
-- es hat sich ein Unfall ereignet = an accident has occurred
-
-
+- chaotischer = more chaotic
+- Aufgabegepäckstück = checked baggage item / piece of checked luggage
+- noch mal nachschauen = to check again / have another look
+- je nachdem, ob … = depending on whether …
+- durcheinander sein = to be mixed up / out of order; for a sleep schedule: to be disrupted
+- Rhythmus = rhythm / routine
+- Ja, meistens schon. = Yes, usually.
+- Fußabdruck = footprint
+- Erarbeitung = development / preparation / working out
+- winzig = tiny
+- sich ein bisschen entspannen = to relax a little
+- es verdienen, etwas zu tun = to deserve to do something
+- seine Aufgaben erledigen = to complete one’s tasks / chores
+- Hausarbeit machen = to do housework
+- den ganzen Tag mit etwas vergeuden = to waste the whole day on something
+- In die Fernbedienung gehören vier Batterien. = The remote takes four batteries.
+- nirgends = nowhere
+- ahnen = to suspect / have an idea
+- einräumen = to put away / load; also: to admit
+- Mir gefällt gar nicht, wie … = I really don’t like how …
+- das Bad putzen = to clean the bathroom
+- nirgends auch nur eine einzige … finden = to not find even a single … anywhere
+- etwas geahnt haben = to have suspected / anticipated something
+- überall nach etwas suchen = to look everywhere for something
+- mich um den Haushalt kümmern = to take care of the household / household chores
+- keine Lust haben, etwas zu tun = to not feel like doing something
+- die Spülmaschine einräumen = to load the dishwasher
+- Kita = daycare center / nursery
+- Schale = bowl / shell / peel, depending on context
+- Cornflakes = cornflakes
+- Mir fiel auf, dass … = I noticed that …
+- nicht mehr funktionieren = to no longer work
+- mehr oder weniger = more or less
+- bis ein Uhr mittags schlafen = to sleep until 1 p.m.
+- mir war klar, dass … = it was clear to me that …
+- aus dem Fenster sehen = to look out the window
+- Albtraum = nightmare
+- hinter jemandem her sein = to be after someone
+- gefangen = caught / captured / trapped
+- die Rennerei = all the running around / rushing around
+- total erschöpft sein = to be completely exhausted
+- sich viel Zeit lassen = to take one’s time
+- glatt = smooth / slippery; colloquially: downright / actually
+- jemanden über den Haufen fahren = to run someone over
+- besaßen = owned / possessed
+- das Weite suchen = to get away / flee
+- immer näher kommen = to come closer and closer
+- jemanden einholen = to catch up with someone
+- einholen = to catch up with
+- Ruf = call / shout; reputation
+- Wikingerhorn = Viking horn
+- Blut = blood
+- etwas glänzen sehen = to see something shining
+- losrennen = to run off / start running
+- das Innere = interior / inside
+- landen = to land; figuratively: to end up
+- Gürtelschnalle = belt buckle
+- glänzen = to shine / gleam
+- der Baumstumpf = tree stump
+- herumstehen = to stand around
+- sich gewöhnen = to get used to
+- im Seitenspiegel = in the side mirror
+- die Reflexion des Mondes = the reflection of the moon
+- mitten im Wald = in the middle of the forest
+- ein verrostetes Wrack = a rusty wreck
+- Autoscheinwerfer = car headlights
+- jemanden blenden = to dazzle / blind someone
+- umkehren = to turn back
+- keinen Schritt weitergehen = to not go one step farther
+- Zeichentrickfilm = cartoon / animated film
+- Dummkopf = fool / idiot
+- richtig gefährlich sein = to be really dangerous
+- ausrasten = to freak out / lose control
+- Biberdamm = beaver dam
+- Lasttier = pack animal / beast of burden
+- Verzweiflung = desperation
+- Forscher = researcher / explorer
+- Wildnis = wilderness
+- wenigstens = at least
+- im Kreis gehen = to walk in circles
+- jemanden irgendwohin führen = to lead someone somewhere
+- einem Bach folgen = to follow a stream
+- verloren sein = to be lost
+- vor lauter Verzweiflung = out of sheer desperation
+- jemanden am Leben halten = to keep someone alive
+- eine Quelle finden = to find a spring / water source
+- in den Bergen gefangen sein = to be trapped in the mountains
+- ruhig bleiben = to stay calm
+- erfrieren = to freeze to death
+- sich verirrt haben = to have gotten lost
+- Bach = stream / creek
+- erstarren = to freeze / become rigid
+- wiederfinden = to find again / recover
+- klar werden = to become clear / realize
+- Fußspur = footprint / track
+- vor Schreck erstarren = to freeze with fear
+- im Wald festsitzen = to be stuck in the forest
+- bei Dunkelheit = in the dark / after dark
+- die Sonne geht unter = the sun sets / is going down
+- zur Straße zurück = back to the road
+- zu weit gegangen sein = to have gone too far
+- Da begriff ich, dass … = That’s when I realized that …
+- Nach einer Weile wurde mir klar, dass … = After a while, I realized that …
+- Mir war das nur recht. = That suited me just fine. / I was perfectly happy with that.
+- gespenstisch = eerie / spooky
+- nur eine Wahl haben = to have only one choice
+- jemandem auflauern = to lie in wait for someone
+- nur so lange …, bis … = only as long as … until …
+- über etwas Bescheid wissen = to know about something / be informed about something
+- alles andere als lustig = anything but funny
+- Schlafsack = sleeping bag
+- bei jemandem übernachten = to stay overnight at someone’s place
+- oder umgekehrt = or vice versa
+- sich nicht sicher sein, ob … = to not be sure whether …
+- so ziemlich das Letzte, was ich wollte = pretty much the last thing I wanted
+- sich zur Flucht entscheiden = to choose / decide to flee
+- sich einer Meute stellen = to face a pack / mob
+- eine Lüge glauben = to believe a lie
+- zurennen = to run toward
+- direkt auf jemanden zurennen = to run straight toward someone
+- eine Meile von … entfernt sein = to be a mile away from …
+- auffliegen = to be exposed / get caught / be found out
+- die Schuld auf sich nehmen = to take the blame
+- Mehr war nicht nötig. = Nothing more was needed. / That was all it took.
+- irgend so ein … = some … or other / some random …
+- sich umdrehen = to turn around
+- jemanden dazu bewegen, etwas zu tun = to persuade / get / convince someone to do something
+- den Motor abstellen = to switch off the engine
+- Das Schlimmste an der ganzen Sache war, dass … = The worst thing about the whole situation was that …
+- über eine Stunde warten = to wait for over an hour
+- auf der ersten Seite aufschlagen = to open to the first page
+- ein Buch aufschlagen = to open a book
+- verpfeifen = to snitch on / tell on
+- der Mucks = peep / sound
+- Petze = snitch / tattletale
+- bluffen = to bluff
+- sich ziemlich sicher sein, dass … = to be pretty sure that …
+- jemanden verpfeifen = to snitch on someone
+- Ich wünschte, ich hätte gewusst, … = I wish I had known …
+- einen Mucks machen = to make a sound / peep
+- Überlegt es euch. = Think it over.
+- sich melden = to speak up / come forward / identify oneself
+- einen Schneeball werfen = to throw a snowball
+- Trottel = idiot / fool
+- unauffällig = inconspicuous / discreet
+- keinen Ärger machen = to not cause trouble
+- etwas für sich haben = to have something to oneself
+- Meinetwegen können sie … = As far as I’m concerned, they can … / I don’t mind if they …
+- schütteln = to shake
+- für sich allein = all to oneself / on one’s own
+- sausen = to race / whiz
+- steil = steep
+- rausschmeißen / schmeißen = to throw out / kick out
+- jemanden von einem Ort jagen = to chase someone away from a place
+- den Hang hinuntersausen = to race down the hill
+- richtig abheben = to really take off / become airborne
+- echt steil sein = to be really steep
+- genau so sein, wie … = to be exactly as …
+- Ich muss zugeben, … = I have to admit, …
+- aus einem Club geschmissen werden = to be kicked out of a club
+- genau genommen = strictly speaking
+- Mitglied in einem Club sein = to be a member of a club
+- dran sein = to be true / have something to it; depending on context: to be one's turn
+- Gerede = talk / chatter / rumors
+- sich weigern = to refuse
+- wegen etwas nervös sein = to be nervous about something
+- herausfinden, was an etwas dran ist = to find out whether there is any truth to something
+- ein Grundstück betreten = to enter / step onto a property
+- legendär sein = to be legendary
+- Feinde = enemies
+- Hauptsache = the main thing / most importantly
+- Ganz schön erschreckend! = Pretty scary!
+- Fernziele = long-term goals
+- Nahziele = short-term goals
+- Pfand = deposit / refundable deposit
+- dranbleiben = to keep at it / stick with it
+- abhören = to listen to / monitor; medically: to auscultate
+- Pfütze = puddle
+- Etikett = label
+- Ziegel = brick
+- rutschfest = non-slip / slip-resistant
+- umwickeln = to wrap around
+- überlasten = to overload
+- verschneit = snowy / covered in snow
+- aufreißen = to tear open / fling open
+- geraten = to get into / end up in; also: to advise, depending on form
+- fertigmachen = to finish / get ready; colloquially: to wear someone down
+- Matsch = slush / mud
+- klassifizieren = to classify
+- nun mal = simply / just the way it is
+- abfrieren = to freeze off
+- Hintern = butt / backside
+- Schlamm = mud
+- kauen = to chew
+- ab Anfang nächsten Monats = from the beginning of next month
+- Mich würde interessieren, ob … = I’d be interested to know whether …
+- sich beruflich weiterentwickeln = to develop professionally / advance one’s career
+- zu meiner Erfahrung passen = to match / fit my experience
+- Ja! = Yes!
+- Doch! = Yes! / Actually, yes! / On the contrary!

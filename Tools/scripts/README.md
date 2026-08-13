@@ -4,6 +4,19 @@ This directory contains specialized scripts for processing German vocabulary req
 
 ## Scripts Overview
 
+### Full Pipeline Runner
+
+#### `run_full_pipeline.py`
+**Purpose**: Run NW1 through NW4 with one resumable checkpoint contract.
+
+**Usage**:
+- Fresh run: `py Tools/scripts/run_full_pipeline.py`
+- Resume: `py Tools/scripts/run_full_pipeline.py --resume`
+
+**State**: `Outputs/reports/pipeline_state.json` is current resumable-state SSOT. Resume skips only unchanged completed logical stages. Missing, changed, failed, or interrupted stages rerun with their dependents.
+
+**Recovery**: Corrupt state stops `--resume`. Remove only `Outputs/reports/pipeline_state.json` to intentionally start fresh. Do not manually invoke downstream scripts as recovery.
+
 ### Requirement Processing
 
 #### `process_requirement1.py`

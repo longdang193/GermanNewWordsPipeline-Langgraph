@@ -71,4 +71,8 @@ New-Item -ItemType Directory -Force -Path $specDir | Out-Null
   $excludeArgs `
   (Join-Path $toolsDir "src\\gnw\\__main__.py")
 
+if ($LASTEXITCODE -ne 0) {
+  throw "PyInstaller failed with exit code $LASTEXITCODE"
+}
+
 Write-Host "[OK] Built: $OutDir\\GermanNewWords.exe"
