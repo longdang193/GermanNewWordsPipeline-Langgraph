@@ -1738,9 +1738,6 @@ EEND"""
                 "Add override data instead of using code-generated fallback."
             )
 
-        if lower.startswith(("der ", "die ", "das ")):
-            return f"{token} liegt schon auf dem Tisch."
-
         raise ValueError(
             f"Missing LLM-authored German example for '{token}'. "
             "Add override data instead of using code-generated fallback."
@@ -1768,9 +1765,6 @@ EEND"""
                 f"Missing LLM-authored English example for '{token}'. "
                 "Add override data instead of using code-generated fallback."
             )
-
-        if lower.startswith(("der ", "die ", "das ")):
-            return f"{token} is already lying on the table."
 
         raise ValueError(
             f"Missing LLM-authored English example for '{token}'. "

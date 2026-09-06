@@ -35,11 +35,6 @@ shared_optional_context_fields:
 
 allowed_values:
   status:
-    roadmap:
-      - proposed
-      - active
-      - completed
-      - dropped
     spec:
       - proposed
       - active
@@ -50,6 +45,11 @@ allowed_values:
       - active
       - completed
       - superseded
+  executor:
+    shared:
+      - codex
+      - deepagents
+      - tura
   layer:
     shared:
       - intent
@@ -57,25 +57,12 @@ allowed_values:
       - change
 
 artifacts:
-  roadmap:
-    description: Optional multi-outcome project roadmap.
-    path_globs:
-      - docs/intent/master-workstream-roadmap.md
-    identity:
-      canonical_field: name
-      legacy_field: template_id
-      recommended_value: master-workstream-roadmap
-    optional_fields:
-      - template_id
-      - name
-    required_values:
-      artifact_type: roadmap
-      layer: intent
-
   spec:
     description: Detailed specification artifact.
     path_globs:
       - docs/superpowers/specs/*.md
+    required_fields:
+      - template_id
     identity:
       canonical_field: name
       legacy_field: none
@@ -92,6 +79,8 @@ artifacts:
     description: Implementation plan artifact.
     path_globs:
       - docs/superpowers/plans/*.md
+    required_fields:
+      - template_id
     identity:
       canonical_field: name
       legacy_field: none
@@ -102,6 +91,5 @@ artifacts:
       - targets
       - related_features
       - related_stages
-      - coordination
     required_values:
       artifact_type: plan

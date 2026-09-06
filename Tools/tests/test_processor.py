@@ -310,3 +310,12 @@ def test_try_llm_enrich_override_raises_on_auth_failure(monkeypatch, tmp_path):
     else:
         raise AssertionError("Expected NW1 auth failures to surface as actionable runtime errors.")
 
+def test_article_noun_without_override_has_no_fabricated_example() -> None:
+    processor = GermanVocabProcessor(requirement_file="dummy", output_file="dummy")  # type: ignore[arg-type]
+
+    try:
+        processor.build_example_de("das Getümmel")
+    except ValueError as exc:
+        assert "Missing LLM-authored German example" in str(exc)
+    else:
+        raise AssertionError("Article nouns must not use fabricated table examples.")
